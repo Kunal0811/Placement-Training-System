@@ -1,391 +1,207 @@
 import React, { useState } from "react";
-import { useAuth } from "../context/AuthContext";
-import { analyzeResumeForRole, analyzeResumeForJD } from "../api";
+import axios from "axios";
+import API_BASE from "../api";
 import ScoreDonutChart from "../components/ScoreDonutChart";
-import { FiUpload, FiFileText, FiBriefcase, FiAlertTriangle, FiCheckCircle, FiStar } from "react-icons/fi";
+import { FiUpload, FiFileText, FiBriefcase, FiAlertTriangle, FiCheckCircle, FiStar, FiTarget, FiZap } from "react-icons/fi";
 
-// --- Star Rating Component ---
 const StarRating = ({ rating }) => {
   const fullStars = Math.floor(rating);
   const halfStar = rating % 1 >= 0.5;
   const emptyStars = 5 - fullStars - (halfStar ? 1 : 0);
   
   return (
-    <div className="flex text-yellow-400" style={{ minWidth: '100px' }}>
+    <div className="flex text-yellow-400 text-sm">
       {[...Array(fullStars)].map((_, i) => <FiStar key={`f-${i}`} fill="currentColor" />)}
-      {halfStar && <FiStar key="h" fill="currentColor" style={{ clipPath: 'polygon(0 0, 50% 0, 50% 100%, 0% 100%)' }} />}
+      {halfStar && <FiStar fill="currentColor" className="opacity-50" />}
       {[...Array(emptyStars)].map((_, i) => <FiStar key={`e-${i}`} />)}
     </div>
   );
 };
 
-// --- List of roles from your JSON file ---
-const jobRoles = [
-  "Data Analyst", "Data Scientist", "Machine Learning Engineer", "AI Engineer",
-  "Software Engineer","Python Engineer", "Full Stack Developer", "Frontend Developer", "Backend Developer",
-  "DevOps Engineer", "Cloud Engineer", "Cybersecurity Analyst", "Database Administrator",
-  "UI/UX Designer", "Mobile App Developer", "Game Developer", "Embedded Systems Engineer",
-  "IoT Engineer", "Network Engineer", "System Administrator", "Data Engineer",
-  "Business Analyst", "Project Manager", "QA Engineer", "Product Manager",
-  "Content Writer", "Digital Marketing Specialist", "Graphic Designer", "Blockchain Developer",
-  "Game Designer", "Mechanical Engineer", "Electrical Engineer", "Civil Engineer",
-  "AI Prompt Engineer", "AR/VR Developer", "Research Scientist (AI)", "Operations Manager",
-  "HR Manager", "Financial Analyst", "Customer Support Executive", "Marketing Manager",
-  "Technical Writer", "Automation Engineer", "Robotics Engineer", "Data Architect"
-];
-
-
-// --- NEW SUGGESTIONS COMPONENT ---
-const ResumeSuggestions = ({ formatAnalysis, analysisData }) => {
-  const suggestions = [];
-
-  // 1. Check for missing sections
-  if (formatAnalysis) {
-    if (!formatAnalysis.projects) {
-      suggestions.push({
-        type: 'format',
-        title: 'Missing Projects Section',
-        text: "Your resume doesn't seem to have a dedicated **Projects** section. This is critical for showing your hands-on skills. Add 2-3 relevant projects."
-      });
-    }
-    if (!formatAnalysis.experience) {
-      suggestions.push({
-        type: 'format',
-        title: 'Missing Experience Section',
-        text: "Consider adding an **Experience** or **Internship** section. If you don't have one, this is okay, but it's a major plus for recruiters."
-      });
-    }
-    if (!formatAnalysis.achievements) {
-      suggestions.push({
-        type: 'format',
-        title: 'Missing Achievements Section',
-        text: "An **Achievements** or **Awards** section can help you stand out. Consider adding hackathon wins, high ranks, or scholarships."
-      });
-    }
-  }
-
-  // 2. Check for missing skills in low-scoring areas
-  if (analysisData && analysisData.breakdown) {
-    const lowScoringAreas = analysisData.breakdown
-      .filter(item => item.match_rating < 3 && item.missing_skills.length > 0) // < 3 stars and has missing skills
-      .slice(0, 3); // Get top 3
-    
-    for (const area of lowScoringAreas) {
-      suggestions.push({
-        type: 'skill',
-        title: `Improve Your ${area.skill_area} Skills`,
-        text: `To better match this role, try adding keywords or projects related to: **${area.missing_skills.join(', ')}**.`
-      });
-    }
-  }
-
-  if (suggestions.length === 0) {
-    return (
-      <div className="p-4 bg-green-900/50 border border-green-700 rounded-lg">
-        <h3 className="text-lg font-semibold text-neon-green mb-2">
-          <FiCheckCircle className="inline-block mr-2" /> Great Work!
-        </h3>
-        <p className="text-gray-300">Your resume seems well-structured and covers the key skills for this role. You can always improve by adding more specific project details.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="space-y-4">
-      {suggestions.map((sug, i) => (
-        <div key={i} className="p-4 bg-yellow-900/50 border border-yellow-700 rounded-lg">
-          <h3 className="text-lg font-semibold text-yellow-400 mb-2">
-            <FiAlertTriangle className="inline-block mr-2" /> {sug.title}
-          </h3>
-          {/* This renders the **bold** text */}
-          <p className="text-gray-300" dangerouslySetInnerHTML={{ __html: sug.text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
-        </div>
-      ))}
-    </div>
-  );
-};
-// --- END OF NEW COMPONENT ---
-
-
-const ResumeAnalyzer = () => {
-  const [resumeFile, setResumeFile] = useState(null);
-  const [jobDescription, setJobDescription] = useState("");
-  const [analysisType, setAnalysisType] = useState("role");
-  const [jobRole, setJobRole] = useState(jobRoles[0]); 
-  const [analysisResult, setAnalysisResult] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState("");
-  const { token } = useAuth();
+export default function ResumeAnalyzer() {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [jdText, setJdText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState(null);
 
   const handleFileChange = (e) => {
-    setResumeFile(e.target.files[0]);
-    setAnalysisResult(null);
-    setError("");
+    const file = e.target.files[0];
+    if (file && (file.type === "application/pdf" || file.name.endsWith(".docx"))) {
+      setSelectedFile(file);
+    } else {
+      alert("Only PDF or DOCX files are allowed!");
+      e.target.value = "";
+    }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!resumeFile) {
-      setError("Please upload a resume file (.pdf or .docx).");
-      return;
-    }
+  const handleAnalyze = async () => {
+    if (!selectedFile) return alert("Please upload your resume.");
+    if (!jdText.trim()) return alert("Please paste the Job Description.");
 
-    setIsLoading(true);
-    setAnalysisResult(null);
-    setError("");
+    setLoading(true);
+    const formData = new FormData();
+    formData.append("file", selectedFile);
+    formData.append("jd", jdText);
 
     try {
-      let response;
-      if (analysisType === "role") {
-        response = await analyzeResumeForRole(resumeFile, token);
-      } else {
-        if (!jobDescription.trim()) {
-          setError("Please paste a job description.");
-          setIsLoading(false);
-          return;
-        }
-        response = await analyzeResumeForJD(resumeFile, jobDescription, jobRole, token);
-      }
-      setAnalysisResult(response.data);
-    } catch (err) {
-      console.error(err);
-      setError(
-        err.response?.data?.detail ||
-          "An error occurred during analysis."
-      );
+      const res = await axios.post(`${API_BASE}/api/resume/analyze-jd`, formData, {
+        headers: { "Content-Type": "multipart/form-data" }
+      });
+      setResult(res.data);
+    } catch (error) {
+      console.error(error);
+      alert(error.response?.data?.detail || "An error occurred during ML analysis.");
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
-  
-  // Helper to render format checks
-  const renderFormatCheck = (sections) => {
-    if (!sections) return null;
-    return (
-      <div>
-        <h3 className="text-lg font-semibold text-gray-200 mb-3">Resume Formatting Check</h3>
-        <ul className="grid grid-cols-2 gap-2">
-          {Object.entries(sections).map(([section, isPresent]) => (
-            <li key={section} className="flex items-center text-sm text-gray-300">
-              {isPresent ? (
-                <FiCheckCircle className="text-green-400 mr-2" />
-              ) : (
-                <FiAlertTriangle className="text-yellow-400 mr-2" />
-              )}
-              <span className="capitalize">{section}</span>
-              {isPresent ? "" : <span className="text-gray-500 ml-1">(Missing)</span>}
-            </li>
-          ))}
-        </ul>
-      </div>
-    );
-  };
-
-  // Renders the skill breakdown table
-  const renderAnalysisTable = (breakdown) => {
-    if (!breakdown || breakdown.length === 0) {
-      if (analysisType === 'jd' && jobDescription.trim() === "") {
-         return <p className="text-gray-400">Paste a Job Description to see the breakdown.</p>;
-      }
-      return <p className="text-gray-400">No matching skill categories found for this role/JD combination.</p>;
-    }
-    
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-left min-w-[700px]">
-          <thead>
-            <tr className="border-b border-dark-border">
-              <th className="p-3 text-white w-1/4">Skill Area</th>
-              <th className="p-3 text-white w-1/3">Job Requirement</th>
-              <th className="p-3 text-white w-1/3">Your Resume</th>
-              <th className="p-3 text-white w-auto">Match</th>
-            </tr>
-          </thead>
-          <tbody className="text-gray-300">
-            {breakdown.map((item, index) => (
-              <tr key={index} className="border-b border-gray-800 hover:bg-dark-bg">
-                <td className="p-3 font-semibold">{item.skill_area}</td>
-                <td className="p-3 text-sm">{item.job_requirement}</td>
-                <td className="p-3 text-sm">{item.your_resume}</td>
-                <td className="p-3"><StarRating rating={item.match_rating} /></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
-
-  // Helper variables to get the correct data object
-  const analysisData = analysisType === 'role' 
-    ? analysisResult?.best_match_details 
-    : analysisResult?.jd_match_details;
-
-  const score = analysisData?.overall_score || 0;
-  const breakdown = analysisData?.breakdown;
-  const roleTitle = analysisData?.role;
 
   return (
-    <div className="container mx-auto p-4 md:p-8">
-      <h1 className="text-3xl font-bold text-neon-blue text-glow mb-6">
-        Resume Analyzer
-      </h1>
-      
-      {/* Tab Selection */}
-      <div className="flex border-b border-dark-border mb-6">
-        <button
-          onClick={() => { setAnalysisType("role"); setAnalysisResult(null); }}
-          className={`py-3 px-6 font-semibold transition-colors duration-200 ${
-            analysisType === "role"
-              ? "border-b-2 border-neon-blue text-neon-blue"
-              : "text-gray-400 hover:text-gray-200"
-          }`}
-        >
-          <FiBriefcase className="inline-block mr-2" />
-          Match to Job Role
-        </button>
-        <button
-          onClick={() => { setAnalysisType("jd"); setAnalysisResult(null); }}
-          className={`py-3 px-6 font-semibold transition-colors duration-200 ${
-            analysisType === "jd"
-              ? "border-b-2 border-neon-blue text-neon-blue"
-              : "text-gray-400 hover:text-gray-200"
-          }`}
-        >
-          <FiFileText className="inline-block mr-2" />
-          Match to Job Description
-        </button>
-      </div>
+    <div className="min-h-screen bg-game-bg p-6 md:p-12 text-white font-sans">
+      <div className="max-w-7xl mx-auto space-y-12">
+        
+        {/* Header */}
+        <div className="text-center max-w-3xl mx-auto border-b border-white/10 pb-8">
+          <h1 className="text-4xl md:text-5xl font-display font-black text-white mb-4 tracking-tight flex items-center justify-center gap-3">
+            <FiZap className="text-neon-blue" /> Smart ATS Analyzer
+          </h1>
+          <p className="text-gray-400 text-lg">
+            Powered by TF-IDF Machine Learning & Semantic AI to bypass modern Applicant Tracking Systems.
+          </p>
+        </div>
 
-      {/* Form Area */}
-      <form onSubmit={handleSubmit} className="bg-dark-card shadow-lg rounded-lg p-6 md:p-8 border border-dark-border">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-          {/* Left Column: Inputs */}
-          <div>
-            <label htmlFor="resumeUpload" className="block text-sm font-medium text-gray-400 mb-2">
-              Upload Resume (PDF, DOCX)
+        {/* Upload & Input Section */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          
+          {/* File Upload */}
+          <div className="bg-black/40 backdrop-blur-xl p-8 rounded-3xl border border-white/10 shadow-2xl flex flex-col">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <FiFileText className="text-neon-blue" /> Upload Resume
+            </h2>
+            <label className="flex-1 flex flex-col items-center justify-center border-2 border-dashed border-white/20 rounded-2xl p-10 cursor-pointer hover:border-neon-blue/50 hover:bg-neon-blue/5 transition-all group">
+              <FiUpload className="text-5xl text-gray-500 group-hover:text-neon-blue transition-colors mb-4" />
+              <p className="text-lg font-bold text-gray-300 group-hover:text-white mb-2">
+                {selectedFile ? selectedFile.name : "Click to browse or drag & drop"}
+              </p>
+              <p className="text-sm text-gray-500">PDF or DOCX format only</p>
+              <input type="file" accept=".pdf,.docx" onChange={handleFileChange} className="hidden" />
             </label>
-            <div className="flex items-center justify-center w-full">
-              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dark-border border-dashed rounded-lg cursor-pointer bg-dark-bg hover:bg-opacity-50">
-                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                  <FiUpload className="w-10 h-10 text-gray-500" />
-                  <p className="mb-2 text-sm text-gray-400">
-                    <span className="font-semibold text-neon-blue">Click to upload</span> or drag and drop
-                  </p>
-                  <p className="text-xs text-gray-500">PDF or DOCX</p>
-                </div>
-                <input id="resumeUpload" type="file" className="hidden" onChange={handleFileChange} accept=".pdf,.docx" />
-              </label>
-            </div>
-            {resumeFile && <p className="text-sm text-green-400 mt-2">File selected: {resumeFile.name}</p>}
+          </div>
 
-            {analysisType === "jd" && (
-              <div className="mt-6 space-y-4">
-                <div>
-                  <label htmlFor="jobRoleSelect" className="block text-sm font-medium text-gray-400 mb-2">
-                    Select Target Job Role
-                  </label>
-                  <select
-                    id="jobRoleSelect"
-                    value={jobRole}
-                    onChange={(e) => setJobRole(e.target.value)}
-                    className="w-full p-3 border border-dark-border rounded-lg focus:ring-neon-blue focus:border-neon-blue bg-game-card text-gray-200"
-                  >
-                    {jobRoles.map(role => (
-                      <option key={role} value={role}>{role}</option>
-                    ))}
-                  </select>
-                </div>
+          {/* JD Input */}
+          <div className="bg-black/40 backdrop-blur-xl p-8 rounded-3xl border border-white/10 shadow-2xl flex flex-col">
+            <h2 className="text-xl font-bold text-white mb-6 flex items-center gap-2">
+              <FiBriefcase className="text-neon-purple" /> Target Job Description
+            </h2>
+            <textarea
+              className="w-full flex-1 bg-black/60 border border-white/10 rounded-2xl p-5 text-gray-300 focus:outline-none focus:border-neon-purple focus:ring-1 focus:ring-neon-purple transition-all custom-scrollbar resize-none"
+              placeholder="Paste the exact Job Description here to calculate semantic similarity..."
+              value={jdText}
+              onChange={(e) => setJdText(e.target.value)}
+            ></textarea>
+          </div>
+        </div>
 
-                <div>
-                  <label htmlFor="jobDescription" className="block text-sm font-medium text-gray-400 mb-2">
-                    Paste Job Description
-                  </label>
-                  <textarea
-                    id="jobDescription"
-                    rows="8"
-                    className="w-full p-3 border border-dark-border rounded-lg focus:ring-neon-blue focus:border-neon-blue bg-game-card text-gray-200"
-                    placeholder="Paste the full job description here..."
-                    value={jobDescription}
-                    onChange={(e) => setJobDescription(e.target.value)}
-                  ></textarea>
+        {/* Action Button */}
+        <div className="flex justify-center">
+          <button
+            onClick={handleAnalyze}
+            disabled={loading}
+            className="group relative inline-flex items-center gap-3 px-12 py-5 bg-gradient-to-r from-neon-blue to-neon-purple rounded-2xl text-white font-black text-xl uppercase tracking-widest hover:scale-105 transition-all shadow-[0_0_30px_rgba(45,212,191,0.3)] disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {loading ? (
+              <span className="animate-pulse">Processing ML Vectors...</span>
+            ) : (
+              <>
+                <FiTarget /> Analyze Semantic Match
+              </>
+            )}
+          </button>
+        </div>
+
+        {/* Results Section */}
+        {result && (
+          <div className="bg-black/40 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl mt-12 animate-fade-in-up">
+            <h2 className="text-3xl font-display font-black mb-10 border-b border-white/10 pb-6 text-center">
+              Deep Analysis Report
+            </h2>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-12">
+              
+              {/* Match Score */}
+              <div className="col-span-1 flex flex-col items-center justify-center bg-white/5 rounded-3xl border border-white/10 p-8 shadow-inner">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6">Blended AI & TF-IDF Score</h3>
+                <div className="w-48 h-48 drop-shadow-[0_0_20px_rgba(45,212,191,0.4)]">
+                  <ScoreDonutChart score={result.overall_score} />
+                </div>
+                <p className="mt-6 text-center text-sm text-gray-400">
+                  This score calculates mathematical keyword similarity and contextual AI reasoning.
+                </p>
+              </div>
+
+              {/* Formatting Check */}
+              <div className="col-span-2 bg-white/5 rounded-3xl border border-white/10 p-8 shadow-inner">
+                <h3 className="text-sm font-bold text-gray-400 uppercase tracking-widest mb-6">Resume Formatting Standards</h3>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {Object.entries(result.formatting).map(([key, passed]) => (
+                    <div key={key} className={`flex items-center gap-4 p-4 rounded-2xl border ${passed ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                      {passed ? <FiCheckCircle className="text-2xl text-green-400 shrink-0" /> : <FiAlertTriangle className="text-2xl text-red-400 shrink-0" />}
+                      <div>
+                        <p className={`font-bold ${passed ? 'text-green-400' : 'text-red-400'}`}>{key}</p>
+                        <p className="text-xs text-gray-400">{passed ? "Detected" : "Missing or improperly labeled"}</p>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </div>
+            </div>
+
+            {/* Recommendations */}
+            {result.recommendations && result.recommendations.length > 0 && (
+              <div className="mb-12 bg-gradient-to-r from-neon-purple/20 to-neon-blue/10 border border-neon-purple/30 rounded-3xl p-8">
+                <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                  <FiAlertTriangle className="text-neon-purple" /> AI Recommendations
+                </h3>
+                <ul className="space-y-3">
+                  {result.recommendations.map((rec, index) => (
+                    <li key={index} className="flex items-start gap-3 text-gray-300">
+                      <span className="text-neon-purple mt-1">✦</span> {rec}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             )}
-          </div>
 
-          {/* Right Column: Button & Helper Text */}
-          <div className="flex flex-col justify-between">
+            {/* Semantic Breakdown Table */}
             <div>
-              <h3 className="text-lg font-semibold text-gray-200">
-                {analysisType === "role" ? "How it works" : "What this does"}
-              </h3>
-              <p className="text-sm text-gray-400 mt-2">
-                {analysisType === "role"
-                  ? "Upload your resume and we'll scan it for skills. Then, we'll compare those skills against our job role database to find the role that's your best fit and show a detailed breakdown."
-                  : "Upload your resume, select the target role, and paste a job description. We'll extract skills from the JD and show you how your resume matches against the *specific categories* for that role."}
-              </p>
+              <h3 className="text-lg font-bold text-white mb-6 border-b border-white/10 pb-4">Detailed Semantic Breakdown</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm border-collapse">
+                  <thead>
+                    <tr className="bg-white/5 text-gray-400 uppercase tracking-widest text-[10px]">
+                      <th className="p-4 rounded-tl-xl">Skill Category</th>
+                      <th className="p-4">Required by JD</th>
+                      <th className="p-4">Found in Resume</th>
+                      <th className="p-4 rounded-tr-xl text-right">Semantic Match</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/5 text-gray-300">
+                    {result.breakdown.map((item, idx) => (
+                      <tr key={idx} className="hover:bg-white/5 transition-colors">
+                        <td className="p-4 font-bold text-neon-blue">{item.skill_area}</td>
+                        <td className="p-4">{item.job_requirement}</td>
+                        <td className="p-4 text-gray-400">{item.your_resume}</td>
+                        <td className="p-4 flex justify-end items-center"><StarRating rating={item.match_rating} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="w-full py-3 px-6 bg-neon-blue text-black font-semibold rounded-lg shadow hover:bg-opacity-80 focus:outline-none focus:ring-2 focus:ring-neon-blue focus:ring-opacity-50 disabled:bg-gray-600 disabled:text-gray-400"
-            >
-              {isLoading ? "Analyzing..." : "Analyze Now"}
-            </button>
+
           </div>
-        </div>
-        {error && <p className="text-red-400 text-sm mt-4 text-center">{error}</p>}
-      </form>
-
-      {/* Results Area */}
-      {isLoading && <div className="text-center my-8"><p className="text-gray-300">Analyzing your resume, please wait...</p></div>}
-
-      {analysisResult && (
-        <div className="mt-10 bg-dark-card shadow-lg rounded-lg p-6 md:p-8 border border-dark-border">
-          <h2 className="text-2xl font-bold text-gray-200 mb-6">Analysis Results</h2>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8 mb-8">
-            <div className="flex flex-col items-center justify-center p-4 bg-dark-bg rounded-lg border border-dark-border">
-              <h3 className="text-lg font-semibold text-gray-200 mb-2 text-center">
-                {analysisType === "role" ? "Best Matched Role" : "Job Description Match"}
-              </h3>
-              
-              <ScoreDonutChart score={score} />
-
-              <span className="text-xl font-bold text-neon-blue mt-2 text-glow text-center">
-                {roleTitle}
-              </span>
-            </div>
-            
-            <div className="p-4 bg-dark-bg rounded-lg border border-dark-border md:col-span-2">
-              {renderFormatCheck(analysisResult.format_analysis)}
-            </div>
-          </div>
-          
-          {/* --- MODIFIED: This section now holds the new 2-column layout --- */}
-          <div className="grid grid-cols-1 gap-8">
-            
-            {/* Column 1: Skill Match Breakdown */}
-            <div>
-              <h3 className="text-xl font-bold text-gray-200 mb-4">Skill Match Breakdown</h3>
-              {renderAnalysisTable(breakdown)}
-            </div>
-            
-            {/* Column 2: Recommended Improvements */}
-            <div>
-              <h3 className="text-xl font-bold text-gray-200 mb-4">Recommended Improvements</h3>
-              <ResumeSuggestions 
-                formatAnalysis={analysisResult.format_analysis} 
-                analysisData={analysisData}
-              />
-            </div>
-          </div>
-
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
-};
-
-export default ResumeAnalyzer;
+}

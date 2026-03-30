@@ -1,285 +1,150 @@
 import io
-import csv
 import re
-import pdfplumber
 import docx
 import spacy
-from typing import List, Dict, Set
+import fitz  # PyMuPDF (Install via: pip install pymupdf)
+import pdfplumber
 import json
+import os
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
+from google import genai
+from google.genai import types
 
-# Load the spaCy model
+# Load spaCy for basic NLP entity extraction
 nlp = spacy.load("en_core_web_sm")
 
-# --- 1. Data Loading ---
-
-def load_roles_from_csv(csv_path: str = "dataset.csv") -> Dict[str, Set[str]]:
-    """Loads the dataset.csv for the simple "best role" match."""
-    roles_db = {}
-    try:
-        with open(csv_path, mode='r', encoding='utf-8') as file:
-            reader = csv.reader(file)
-            next(reader)  # Skip header
-            for row in reader:
-                if len(row) >= 2:
-                    role = row[0].strip()
-                    # Skills from CSV *must* be lowercase canonical names
-                    skills = set(skill.strip().lower() for skill in row[1].split(','))
-                    roles_db[role] = skills
-    except FileNotFoundError:
-        print(f"Error: {csv_path} not found. Make sure it's in the backend directory.")
-        return {}
-    return roles_db
-
-def load_structured_roles_from_json(json_path: str = "role_skill_breakdown.json") -> Dict:
-    """Loads the new structured JSON knowledge base."""
-    try:
-        with open(json_path, mode='r', encoding='utf-8') as file:
-            return json.load(file)
-    except FileNotFoundError:
-        print(f"Error: {json_path} not found.")
-        return {}
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode {json_path}.")
-        return {}
-
-def load_skill_synonyms(json_path: str = "skill_synonyms.json") -> Dict[str, List[str]]:
-    """Loads the skill synonym mapping."""
-    try:
-        with open(json_path, mode='r', encoding='utf-8') as file:
-            data = json.load(file)
-            synonym_map = {}
-            for canonical_skill, aliases in data.items():
-                # Key (canonical skill) is now lowercase, values (aliases) are lowercase
-                synonym_map[canonical_skill.lower()] = [alias.lower() for alias in aliases]
-            return synonym_map
-    except FileNotFoundError:
-        print(f"Error: {json_path} not found.")
-        return {}
-    except json.JSONDecodeError:
-        print(f"Error: Could not decode {json_path}.")
-        return {}
-
-
-# --- 2. Resume Parsing ---
-
-def extract_text_from_pdf(file_stream: io.BytesIO) -> str:
+def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
+    """Advanced Text Extraction using PyMuPDF (Fast/Accurate) with a pdfplumber fallback."""
     text = ""
-    with pdfplumber.open(file_stream) as pdf:
-        for page in pdf.pages:
-            page_text = page.extract_text()
-            if page_text:
-                text += page_text + "\n"
-    return text
-
-def extract_text_from_docx(file_stream: io.BytesIO) -> str:
-    doc = docx.Document(file_stream)
-    text = ""
-    for para in doc.paragraphs:
-        text += para.text + "\n"
-    return text
-
-def extract_text_from_resume(file_name: str, file_content: bytes) -> str:
-    file_stream = io.BytesIO(file_content)
-    if file_name.endswith(".pdf"):
-        return extract_text_from_pdf(file_stream)
-    elif file_name.endswith(".docx"):
-        return extract_text_from_docx(file_stream)
-    else:
+    if filename.lower().endswith('.pdf'):
         try:
-            return file_content.decode('utf-8')
-        except UnicodeDecodeError:
-            return ""
-
-# --- 3. Analysis Logic ---
-
-def extract_skills_from_text(text: str, skill_synonym_map: Dict[str, List[str]]) -> Set[str]:
-    """
-    Finds skills using the synonym map.
-    Returns a set of *lowercase canonical skill names*.
-    """
-    found_skills = set()
-    text_lower = text.lower()
-    doc = nlp(text_lower)
-    lemmatized_text = " ".join([token.lemma_ for token in doc])
+            # 1. Primary: PyMuPDF
+            doc = fitz.open(stream=file_bytes, filetype="pdf")
+            for page in doc:
+                text += page.get_text("text") + "\n"
+        except Exception as e:
+            print(f"PyMuPDF failed, falling back to pdfplumber: {e}")
+            try:
+                # 2. Fallback: pdfplumber
+                with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+                    for page in pdf.pages:
+                        extracted = page.extract_text()
+                        if extracted:
+                            text += extracted + "\n"
+            except Exception as e2:
+                print(f"PDF extraction failed completely: {e2}")
+    elif filename.lower().endswith('.docx'):
+        try:
+            doc = docx.Document(io.BytesIO(file_bytes))
+            for para in doc.paragraphs:
+                text += para.text + "\n"
+        except Exception as e:
+            print(f"DOCX extraction failed: {e}")
     
-    for canonical_skill_lower, aliases in skill_synonym_map.items():
-        pattern = r"\b(" + "|".join(re.escape(alias) for alias in aliases) + r")\b"
-        
-        if re.search(pattern, text_lower) or re.search(pattern, lemmatized_text):
-            found_skills.add(canonical_skill_lower) # Add the lowercase canonical skill
-            
-    return found_skills
+    # Clean up whitespace and special characters
+    return re.sub(r'\s+', ' ', text).strip()
 
-def analyze_resume_format(text: str) -> Dict[str, bool]:
+async def analyze_resume_ml(resume_text: str, jd_text: str):
     """
-    Checks for the presence of common resume sections as headings.
-    This is the more robust version to fix the "Experience" bug.
+    Combines classic ML (TF-IDF Cosine Similarity) with Deep Semantic AI (Gemini)
+    to generate a highly accurate and intelligent resume evaluation.
     """
     
-    def find_heading(keyword_pattern: str, text: str) -> bool:
+    # ==========================================
+    # 1. ML CONCEPT: TF-IDF Cosine Similarity
+    # ==========================================
+    # This creates a mathematical vector of the words and calculates the exact geometric angle between them.
+    vectorizer = TfidfVectorizer(stop_words='english')
+    tfidf_matrix = vectorizer.fit_transform([jd_text.lower(), resume_text.lower()])
+    cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
+    
+    # Scale the cosine similarity (usually ranges from 0.1 to 0.4 for good matches) to a 100-point scale
+    ml_base_score = min(100, int((cosine_sim * 2.5) * 100))
+
+    # ==========================================
+    # 2. ML CONCEPT: Heuristic Formatting Check (Regex Line-by-Line)
+    # ==========================================
+    def is_valid_heading(pattern: str, text: str) -> bool:
         """
-        Checks line by line for a heading.
-        A heading is a short line that is (or starts with) the keyword.
+        STRICT CHECK: Verifies that the word exists as a standalone section heading, 
+        not just a random word inside a summary paragraph.
         """
-        # This regex matches a line that *is* the heading (with optional colon/space)
-        # e.g., "Experience", "EXPERIENCE:", "  Projects : "
-        heading_regex = re.compile(r"^\s*(" + keyword_pattern + r")\s*:?\s*$", re.IGNORECASE)
+        lines = text.split('\n')
+        # Regex forces the match to be the ONLY thing on the line (ignoring spaces/colons)
+        heading_regex = re.compile(r"^\s*(" + pattern + r")\s*:?\s*$", re.IGNORECASE)
         
-        for line in text.splitlines():
-            line_stripped = line.strip()
-            
-            # Skip empty lines
-            if not line_stripped:
-                continue
-            
-            # We only check short lines, as headings are not paragraphs
-            # A line like "I have 3 years of experience" will be > 50 chars and ignored
-            if len(line_stripped) < 50:
-                if heading_regex.match(line_stripped):
-                    return True
+        for line in lines:
+            clean_line = line.strip()
+            # A real section heading is usually a short line (under 35 characters)
+            if 0 < len(clean_line) < 35 and heading_regex.match(clean_line):
+                return True
         return False
 
-    sections = {
-        "projects": find_heading(r"project(s)?|personal projects", text),
-        "skills": find_heading(r"skill(s)?|technologies|technical skills", text),
-        "certifications": find_heading(r"certification(s)?|certificate(s)?", text),
-        "experience": find_heading(r"experience|work history|professional experience|internship(s)?", text),
-        "achievements": find_heading(r"achievement(s)?|award(s)?|honors", text),
-        "education": find_heading(r"education|qualification(s)?|academic background", text),
-    }
-    return sections
-
-
-# --- 4. Scoring & Matching ---
-
-def match_resume_to_roles(resume_skills: Set[str], roles_db: Dict[str, Set[str]]):
-    """Finds the best matching role from the CSV dataset."""
-    best_match = { "role": "No Match Found", "score": 0, "matching_skills": [], "missing_skills": [] }
-    
-    for role, required_skills_csv in roles_db.items():
-        if not required_skills_csv: continue
-        
-        # Both sets are now lowercase canonical skills
-        matching_skills = resume_skills.intersection(required_skills_csv)
-        score = 0
-        if required_skills_csv:
-            score = (len(matching_skills) / len(required_skills_csv)) * 100
-        
-        if score > best_match["score"]:
-            best_match = {
-                "role": role,
-                "score": round(score, 2), 
-                "matching_skills": list(matching_skills),
-                "missing_skills": list(required_skills_csv - resume_skills),
-            }
-            
-    return best_match
-
-def get_detailed_role_match(resume_skills: Set[str], role: str, structured_db: Dict):
-    """(For "Match to Role") Analyzes a resume against a specific role from the JSON DB."""
-    if role not in structured_db:
-        return {"error": f"Role '{role}' not found in structured database."}
-
-    role_categories = structured_db[role]
-    analysis_breakdown = []
-    total_required_skills = 0
-    total_matched_skills = 0
-
-    for category in role_categories:
-        skill_area = category.get("skill_area")
-        job_requirement_skills = set(s.lower() for s in category.get("job_requirement_skills", []))
-        
-        if not job_requirement_skills: continue
-
-        total_required_skills += len(job_requirement_skills)
-        
-        # Both sets are lowercase
-        matched_in_category = resume_skills.intersection(job_requirement_skills)
-        missing_in_category = job_requirement_skills.difference(resume_skills)
-        
-        total_matched_skills += len(matched_in_category)
-
-        resume_skills_text = ", ".join(s.capitalize() for s in matched_in_category)
-        if not resume_skills_text:
-            resume_skills_text = "Not explicitly mentioned"
-
-        match_score = 0
-        if len(job_requirement_skills) > 0:
-            match_score = (len(matched_in_category) / len(job_requirement_skills))
-        
-        match_rating = round(match_score * 5, 1)
-
-        analysis_breakdown.append({
-            "skill_area": skill_area,
-            "job_requirement": ", ".join(s.capitalize() for s in job_requirement_skills),
-            "your_resume": resume_skills_text,
-            "match_rating": match_rating,
-            "missing_skills": list(missing_in_category)
-        })
-
-    overall_score = 0
-    if total_required_skills > 0:
-        overall_score = round((total_matched_skills / total_required_skills) * 100)
-
-    return {
-        "role": role,
-        "overall_score": overall_score,
-        "breakdown": analysis_breakdown
+    formatting = {
+        "Projects": is_valid_heading(r'projects|portfolio|academic projects|project', resume_text),
+        "Certifications": is_valid_heading(r'certifications|certificates|courses', resume_text),
+        "Experience": is_valid_heading(r'experience|work experience|professional experience|employment history', resume_text),
+        "Education": is_valid_heading(r'education|academic background|qualifications', resume_text),
+        "Skills": is_valid_heading(r'skills|technical skills|technologies|core competencies', resume_text)
     }
 
-def match_resume_to_jd_categorized(resume_skills: Set[str], jd_text: str, role_name: str, structured_db: Dict, skill_synonym_map: Dict[str, List[str]]):
-    """(For "Match to JD") Analyzes resume against JD text using the specified role as a lens."""
+    # ==========================================
+    # 3. DEEP SEMANTIC AI: Gemini 2.5 Skill Analysis
+    # ==========================================
+    api_key = os.getenv("GEMINI_API_KEY_RESUME")
+    if not api_key:
+        return {"score": ml_base_score, "breakdown": [], "formatting": formatting, "recommendations": ["API Key Missing. Set GEMINI_API_KEY."]}
     
-    # jd_skills is now a set of lowercase canonical skills
-    jd_skills = extract_skills_from_text(jd_text, skill_synonym_map)
+    client = genai.Client(api_key=api_key)
     
-    if not jd_skills:
-        return {"overall_score": 0, "breakdown": []}
-
-    role_categories = structured_db.get(role_name)
+    prompt = f"""
+    You are an expert ATS (Applicant Tracking System) and Senior Tech Recruiter.
+    Analyze the following Job Description (JD) and the candidate's Resume.
     
-    if not role_categories:
-        return {"overall_score": 0, "breakdown": [], "error": f"Role '{role_name}' not found."}
+    JD: {jd_text[:3000]}
+    Resume: {resume_text[:4000]}
     
-    analysis_breakdown = []
-    total_required_skills_in_jd = 0
-    total_matched_skills = 0
-
-    for category in role_categories:
-        skill_area = category.get("skill_area")
-        all_canonical_skills_in_category = set(s.lower() for s in category.get("job_requirement_skills", []))
-
-        # Both sets are lowercase
-        jd_skills_in_this_category = jd_skills.intersection(all_canonical_skills_in_category)
+    Perform a deep semantic match. Do NOT rely on exact keywords. Understand that "GCP" means "Google Cloud", "ReactJS" means "React", etc.
+    1. Identify the core categories of skills required in the JD.
+    2. For each category, list the skills required.
+    3. Check if the resume has these skills or semantic equivalents.
+    4. Provide a rating out of 5 for that specific category.
+    5. Provide 2 to 3 short, actionable recommendations to improve this resume for this specific JD.
+    
+    Return STRICTLY a JSON object in this exact format:
+    {{
+        "ai_semantic_score": 85,
+        "breakdown": [
+            {{
+                "skill_area": "Core Programming",
+                "job_requirement": "Python, Java",
+                "your_resume": "Python (Found), Java (Missing)",
+                "match_rating": 2.5
+            }}
+        ],
+        "recommendations": ["Add AWS certification", "Quantify project impacts"]
+    }}
+    """
+    
+    try:
+        response = client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
+        )
+        ai_data = json.loads(response.text)
         
-        if jd_skills_in_this_category:
-            job_requirement_text = ", ".join(s.capitalize() for s in jd_skills_in_this_category)
-            
-            # Both sets are lowercase
-            resume_skills_in_this_category = resume_skills.intersection(jd_skills_in_this_category)
-            resume_skills_text = ", ".join(s.capitalize() for s in resume_skills_in_this_category)
-            if not resume_skills_text:
-                resume_skills_text = "Not explicitly mentioned"
-                
-            match_rating = round((len(resume_skills_in_this_category) / len(jd_skills_in_this_category)) * 5, 1)
-
-            analysis_breakdown.append({
-                "skill_area": skill_area,
-                "job_requirement": job_requirement_text,
-                "your_resume": resume_skills_text,
-                "match_rating": match_rating,
-                "missing_skills": list(jd_skills_in_this_category - resume_skills_in_this_category)
-            })
-            
-            total_required_skills_in_jd += len(jd_skills_in_this_category)
-            total_matched_skills += len(resume_skills_in_this_category)
-
-    overall_score = 0
-    if total_required_skills_in_jd > 0:
-        overall_score = round((total_matched_skills / total_required_skills_in_jd) * 100)
-
-    return {
-        "role": f"JD Match ({role_name})",
-        "overall_score": overall_score,
-        "breakdown": analysis_breakdown
-    }
+        # 🌟 HYBRID SCORING: Blend the strict Mathematical ML Score (30%) with the Semantic AI Score (70%)
+        ai_score = ai_data.get("ai_semantic_score", 50)
+        final_blended_score = int((ml_base_score * 0.3) + (ai_score * 0.7))
+        
+        return {
+            "score": final_blended_score,
+            "breakdown": ai_data.get("breakdown", []),
+            "formatting": formatting,
+            "recommendations": ai_data.get("recommendations", [])
+        }
+    except Exception as e:
+        print("Gemini analysis failed:", e)
+        return {"score": ml_base_score, "breakdown": [], "formatting": formatting, "recommendations": ["Error connecting to AI analysis."]}
