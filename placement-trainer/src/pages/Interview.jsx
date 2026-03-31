@@ -290,7 +290,7 @@ export default function Interview() {
                         </div>
                     </div>
                     <div className="flex items-center gap-6">
-                        <div className="flex gap-2 hidden md:flex">
+                        <div className="gap-2 hidden md:flex">
                             {questions.map((_, i) => (
                                 <div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i < currentIndex ? 'w-8 bg-cyan-500' : i === currentIndex ? 'w-12 bg-white shadow-[0_0_10px_white]' : 'w-4 bg-gray-800'}`}></div>
                             ))}

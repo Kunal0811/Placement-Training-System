@@ -60,7 +60,7 @@ os.makedirs("static/profile_pics", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- CORS Middleware ---
-allowed = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173",).split(",")
+allowed = os.getenv("ALLOWED_ORIGINS", "https://1x7hgzrp-5173.inc1.devtunnels.ms",).split(",")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[o.strip() for o in allowed if o.strip()],

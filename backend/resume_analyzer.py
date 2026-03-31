@@ -42,8 +42,8 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
         except Exception as e:
             print(f"DOCX extraction failed: {e}")
     
-    # Clean up whitespace and special characters
-    return re.sub(r'\s+', ' ', text).strip()
+    # Clean up horizontal whitespace (spaces/tabs) but PRESERVE newlines
+    return re.sub(r'[^\S\n]+', ' ', text).strip()
 
 async def analyze_resume_ml(resume_text: str, jd_text: str):
     """
@@ -54,12 +54,9 @@ async def analyze_resume_ml(resume_text: str, jd_text: str):
     # ==========================================
     # 1. ML CONCEPT: TF-IDF Cosine Similarity
     # ==========================================
-    # This creates a mathematical vector of the words and calculates the exact geometric angle between them.
     vectorizer = TfidfVectorizer(stop_words='english')
     tfidf_matrix = vectorizer.fit_transform([jd_text.lower(), resume_text.lower()])
     cosine_sim = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:2])[0][0]
-    
-    # Scale the cosine similarity (usually ranges from 0.1 to 0.4 for good matches) to a 100-point scale
     ml_base_score = min(100, int((cosine_sim * 2.5) * 100))
 
     # ==========================================
@@ -67,30 +64,42 @@ async def analyze_resume_ml(resume_text: str, jd_text: str):
     # ==========================================
     def is_valid_heading(pattern: str, text: str) -> bool:
         """
-        STRICT CHECK: Verifies that the word exists as a standalone section heading, 
-        not just a random word inside a summary paragraph.
+        Checks for both standalone headings (e.g., "Education") 
+        and inline colon-separated headings (e.g., "Certifications: AWS...").
         """
         lines = text.split('\n')
-        # Regex forces the match to be the ONLY thing on the line (ignoring spaces/colons)
-        heading_regex = re.compile(r"^\s*(" + pattern + r")\s*:?\s*$", re.IGNORECASE)
+        
+        # Type 1: Standalone heading (must be short, only contains the heading)
+        standalone_regex = re.compile(r"^\s*(" + pattern + r")\s*:?\s*$", re.IGNORECASE)
+        
+        # Type 2: Inline heading (starts with the pattern, requires a colon, ignores length)
+        inline_regex = re.compile(r"^\s*(" + pattern + r")\s*:.*$", re.IGNORECASE)
         
         for line in lines:
             clean_line = line.strip()
-            # A real section heading is usually a short line (under 35 characters)
-            if 0 < len(clean_line) < 35 and heading_regex.match(clean_line):
+            if not clean_line:
+                continue
+                
+            # Check standalone (with length limit to avoid matching random short sentences)
+            if len(clean_line) < 40 and standalone_regex.match(clean_line):
                 return True
+                
+            # Check inline (must have a colon acting as a separator)
+            if inline_regex.match(clean_line):
+                return True
+                
         return False
 
     formatting = {
-        "Projects": is_valid_heading(r'projects|portfolio|academic projects|project', resume_text),
-        "Certifications": is_valid_heading(r'certifications|certificates|courses', resume_text),
-        "Experience": is_valid_heading(r'experience|work experience|professional experience|employment history', resume_text),
-        "Education": is_valid_heading(r'education|academic background|qualifications', resume_text),
-        "Skills": is_valid_heading(r'skills|technical skills|technologies|core competencies', resume_text)
+        "Projects": is_valid_heading(r'projects|portfolio|academic projects|personal projects|project', resume_text),
+        "Certifications": is_valid_heading(r'certifications|certificates|courses|licenses', resume_text),
+        "Experience": is_valid_heading(r'experience|work experience|professional experience|employment history|work history', resume_text),
+        "Education": is_valid_heading(r'education|academic background|qualifications|academics', resume_text),
+        "Skills": is_valid_heading(r'skills|technical skills|technologies|core competencies|expertise', resume_text)
     }
 
     # ==========================================
-    # 3. DEEP SEMANTIC AI: Gemini 2.5 Skill Analysis
+    # 3. DEEP SEMANTIC AI: Gemini Skill Analysis
     # ==========================================
     api_key = os.getenv("GEMINI_API_KEY_RESUME")
     if not api_key:
@@ -135,7 +144,7 @@ async def analyze_resume_ml(resume_text: str, jd_text: str):
         )
         ai_data = json.loads(response.text)
         
-        # 🌟 HYBRID SCORING: Blend the strict Mathematical ML Score (30%) with the Semantic AI Score (70%)
+        # Hybrid Scoring
         ai_score = ai_data.get("ai_semantic_score", 50)
         final_blended_score = int((ml_base_score * 0.3) + (ai_score * 0.7))
         
