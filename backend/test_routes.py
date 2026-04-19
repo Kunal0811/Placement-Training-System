@@ -80,7 +80,7 @@ def submit_test(test_id: int, req: SubmitTestReq, db_cursor: tuple = Depends(get
         prompt = create_session_evaluation_prompt(subs_data, "Hard")
         
         try:
-            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            response = client.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
             cleaned = response.text.replace("```json", "").replace("```", "").strip()
             start_idx, end_idx = cleaned.find('['), cleaned.rfind(']')
             evaluations = json.loads(cleaned[start_idx:end_idx+1]) if start_idx != -1 else []

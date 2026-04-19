@@ -122,7 +122,7 @@ async def fetch_question_chunk_async(client, category: str, diff: str, count: in
     print(f"⏳ Background: Generating {count} {diff} questions for University Level...")
     for attempt in range(3):
         try:
-            response = await client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            response = await client.aio.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
             
             text = response.text
             start_idx, end_idx = text.find('['), text.rfind(']')
@@ -285,7 +285,7 @@ async def generate_coding_test_background(test_id: int, req: ScheduleTestReq):
     for attempt in range(3):
         try:
             print(f"⏳ Generating Coding Questions (Attempt {attempt+1})...")
-            response = await client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            response = await client.aio.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
             
             text = response.text
             start_idx, end_idx = text.find('['), text.rfind(']')

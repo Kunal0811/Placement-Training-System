@@ -3,7 +3,7 @@ import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import API_BASE from "../../api";
-import { FiMail, FiLock, FiArrowRight, FiEye, FiEyeOff } from "react-icons/fi";
+import { FiMail, FiLock, FiArrowRight, FiEye, FiEyeOff,FiAlertTriangle } from "react-icons/fi";
 
 export default function Login() {
   const { login } = useAuth();
@@ -151,7 +151,7 @@ export default function Login() {
                     onChange={(e) => setEmail(e.target.value)}
                     onFocus={() => setFocusedField("email")}
                     onBlur={() => setFocusedField("none")}
-                    placeholder="kunal@placify.com"
+                    placeholder="kunal@gmail.com"
                     required
                   />
               </div>

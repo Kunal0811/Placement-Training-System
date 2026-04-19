@@ -173,7 +173,7 @@ async def generate_single_topic(topic: str, count: int, difficulty: str, api_key
     client = genai.Client(api_key=api_key)
     prompt = generate_prompt(topic, count, difficulty)
     
-    models_to_try = ["gemini-2.5-flash", "gemini-2.5-flash-lite"] 
+    models_to_try = ["gemini-2.5-flash-lite"] 
     for model_name in models_to_try:
         try:
             response = await client.aio.models.generate_content(model=model_name, contents=prompt)

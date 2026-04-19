@@ -60,10 +60,13 @@ os.makedirs("static/profile_pics", exist_ok=True)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- CORS Middleware ---
-allowed = os.getenv("ALLOWED_ORIGINS", "https://1x7hgzrp-5173.inc1.devtunnels.ms",).split(",")
+# Change this block in main.py
+allowed = os.getenv("ALLOWED_ORIGINS", "https://1x7hgzrp-5173.inc1.devtunnels.ms").split(",")
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[o.strip() for o in allowed if o.strip()],
+    # This reads your exact frontend Dev Tunnel URL from the .env file
+    allow_origins=[o.strip() for o in allowed if o.strip()], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -73,7 +73,7 @@ async def generate_interview_questions(req: GenerateQuestionsReq):
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",
@@ -119,7 +119,7 @@ async def evaluate_interview_batch(req: EvaluateInterviewReq, db_cursor: tuple =
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt,
             config=types.GenerateContentConfig(
                 response_mime_type="application/json",

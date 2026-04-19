@@ -160,7 +160,7 @@ def get_level_problems(req: LevelProblemRequest, db_cursor: tuple = Depends(get_
     for attempt in range(max_retries):
         try:
             response = client.models.generate_content(
-                model="gemini-2.5-flash",
+                model="gemini-2.5-flash-lite",
                 contents=prompt,
             )
             cleaned = response.text.replace("```json", "").replace("```", "").strip()
@@ -225,7 +225,7 @@ def evaluate_session(req: SessionEvaluationRequest, db_cursor: tuple = Depends(g
 
     try:
         response = client.models.generate_content(
-            model="gemini-2.5-flash",
+            model="gemini-2.5-flash-lite",
             contents=prompt,
         )
         cleaned = response.text.replace("```json", "").replace("```", "").strip()

@@ -51,7 +51,7 @@ async def create_session(req: CreateSessionReq, db_cursor: tuple = Depends(get_c
         Topics should be about modern workplace culture, software industry trends, or general technology (e.g., 'Work from Home vs Office', 'Will AI replace software engineers?', 'Impact of Social Media'). 
         Keep it relatable for 22-year-old college students. Return ONLY the topic string, no quotes or intro.
         """
-        response = await client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = await client.aio.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
         ai_topic = response.text.strip().strip('"').strip("'")
 
         cursor.execute(
@@ -215,7 +215,7 @@ async def evaluate_gd(req: EvaluateReq, db_cursor: tuple = Depends(get_cursor)):
     try:
         api_key = os.getenv("GEMINI_API_KEY_INTERVIEW") or os.getenv("GEMINI_API_KEY")
         client = genai.Client(api_key=api_key)
-        response = await client.aio.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+        response = await client.aio.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
         
         cleaned = response.text.replace("```json", "").replace("```", "").strip()
         data = json.loads(cleaned)
