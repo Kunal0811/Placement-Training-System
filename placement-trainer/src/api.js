@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API_BASE = import.meta.env.VITE_API_URL || "https://placify-backend-q4o3.onrender.com";
 export default API_BASE;
 
 // ---- Auth ----

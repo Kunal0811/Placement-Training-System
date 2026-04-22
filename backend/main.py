@@ -61,7 +61,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- CORS Middleware ---
 # Change this block in main.py
-allowed = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173").split(",")
+allowed = os.getenv("ALLOWED_ORIGINS", "https://placify-backend-q4o3.onrender.com").split(",")
 
 app.add_middleware(
     CORSMiddleware,
