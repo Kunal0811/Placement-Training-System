@@ -2,6 +2,7 @@ fastapi
 uvicorn[standard]
 python-dotenv
 pydantic
+email-validator
 google-genai
 python-jose
 passlib
