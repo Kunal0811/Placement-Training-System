@@ -11,8 +11,15 @@ from sklearn.metrics.pairwise import cosine_similarity
 from google import genai
 from google.genai import types
 
-# Load spaCy for basic NLP entity extraction
-nlp = spacy.load("en_core_web_sm")
+# 🔥 THE FIX: Lazy Load spaCy to prevent Render deployment timeouts!
+_nlp = None
+
+def get_nlp():
+    global _nlp
+    if _nlp is None:
+        import spacy
+        _nlp = spacy.load("en_core_web_sm")
+    return _nlp
 
 def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
     """Advanced Text Extraction using PyMuPDF (Fast/Accurate) with a pdfplumber fallback."""
