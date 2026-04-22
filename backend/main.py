@@ -61,12 +61,13 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # --- CORS Middleware ---
 # Change this block in main.py
-allowed = os.getenv("ALLOWED_ORIGINS", "https://placement-training-system-55wp.vercel.app/").split(",")
+origins = [
+    "https://placement-training-system-55wp.vercel.app"
+]
 
 app.add_middleware(
     CORSMiddleware,
-    # This reads your exact frontend Dev Tunnel URL from the .env file
-    allow_origins=[o.strip() for o in allowed if o.strip()], 
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

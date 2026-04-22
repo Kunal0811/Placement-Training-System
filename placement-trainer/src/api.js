@@ -1,12 +1,20 @@
 import axios from "axios";
 
-const API_BASE = import.meta.env.VITE_API_URL || "https://placify-backend-q4o3.onrender.com";
+const API_BASE ="https://placify-backend-q4o3.onrender.com";
 export default API_BASE;
 
 // ---- Auth ----
 export async function registerUser(userData) {
   // userData = { fname, lname, email, year, field, password }
   const res = await axios.post(`${API_BASE}/api/register`, userData);
+  return res.data;
+}
+
+export async function sendRegistrationOTP(email) {
+  const res = await axios.post(
+    `${API_BASE}/api/send-registration-otp`,
+    { email }
+  );
   return res.data;
 }
 
