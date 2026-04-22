@@ -186,8 +186,8 @@ def get_level_problems(req: LevelProblemRequest, db_cursor: tuple = Depends(get_
                     "examples": [{"input": "hello", "output": "olleh"}],
                     "starter_code": {
                         "python": "def reverse_string(s):\n    # Write your code here\n    pass",
-                        "java": "class Solution {\n    public String reverseString(String s) {\n        // Write your code here\n        return \"\";\n    }\n}",
-                        "cpp": "class Solution {\npublic:\n    string reverseString(string s) {\n        // Write your code here\n        return \"\";\n    }\n};"
+                        "java": "class Solution {\n    public String reverseString(String s) {\n        # Write your code here\n        return \"\";\n    }\n}",
+                        "cpp": "class Solution {\npublic:\n    string reverseString(string s) {\n        # Write your code here\n        return \"\";\n    }\n};"
                     },
                     "driver_code": {
                         "python": "\nimport sys\nif __name__ == '__main__':\n    input_data = sys.stdin.read().strip()\n    if input_data:\n        print(reverse_string(input_data))",
@@ -199,15 +199,11 @@ def get_level_problems(req: LevelProblemRequest, db_cursor: tuple = Depends(get_
 @router.post("/run-code")
 def run_code(req: RunCodeRequest):
     try:
-        # 🔥 FIX 1: Safely handle null/None values if the frontend sends them
         safe_code = req.code if req.code else ""
         safe_driver = req.driver_code if req.driver_code else ""
         safe_input = req.input if req.input else ""
 
-        # GLUE THE CODE TOGETHER: User Code + Hidden Driver Code
         full_execution_code = safe_code + "\n" + safe_driver
-        
-        # Pass the COMBINED code to the Docker sandbox
         output = run_in_sandbox(req.language, full_execution_code, safe_input)
         return {"output": output}
     except Exception as e:
@@ -263,9 +259,9 @@ def evaluate_session(req: SessionEvaluationRequest, db_cursor: tuple = Depends(g
         raise HTTPException(status_code=500, detail="Failed to evaluate session.")
 
 # --- Sandbox Execution ---
-# --- Sandbox Execution ---
 def run_in_sandbox(language: str, code: str, stdin: str) -> str:
-    temp_dir = f"../temp_code/{uuid.uuid4()}"
+    # Use the /tmp directory which is always writable in Linux environments like Render
+    temp_dir = os.path.join("/tmp", str(uuid.uuid4()))
     try:
         os.makedirs(temp_dir, exist_ok=True)
     except Exception as e:
@@ -290,18 +286,18 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
             code = re.sub(r'public class \w+', 'public class MyClass', code, count=1)
 
     file_path = os.path.join(temp_dir, file_name)
-    # 🔥 THE FIX: Forced UTF-8 encoding so arrows and emojis don't crash Windows!
     with open(file_path, "w", encoding="utf-8") as f:
         f.write(code)
 
     input_path = os.path.join(temp_dir, "input.txt")
-    # 🔥 THE FIX: Forced UTF-8 here as well
     with open(input_path, "w", encoding="utf-8") as f:
         f.write(stdin)
 
     abs_temp_dir = os.path.abspath(temp_dir)
     image_name = f"placify-{language}-runner"
 
+    # 🔥 FIX: Move Docker client initialization INSIDE the function
+    # This prevents the application from crashing on startup when Docker is missing (like on Render)
     try:
         client = docker.from_env()
         
@@ -314,7 +310,7 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
             mem_limit='256m',
             nano_cpus=int(1e9),
             network_disabled=True,
-        )
+        )    
         try:
             result = container.wait(timeout=10)
             logs = container.logs().decode('utf-8')
@@ -325,8 +321,8 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
             container.kill()
             return "Execution Timed Out (10 seconds limit)."
             
-    except docker.errors.DockerException as de:
-        return f"Sandbox Error: Docker daemon is not running or accessible. Please open Docker Desktop and try again."
+    except docker.errors.DockerException:
+        return "Feature Unavailable: The coding sandbox requires Docker. This feature is only available in local development mode."
     except Exception as e:
         return str(e)
     finally:
@@ -338,8 +334,6 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
 @router.post("/execute-bulk")
 def execute_bulk_code(req: BulkRunRequest):
     results = []
-    
-    # 🔥 Safely concatenate to prevent NoneType errors
     safe_code = req.code if req.code else ""
     safe_driver = req.driver_code if req.driver_code else ""
     full_execution_code = safe_code + "\n" + safe_driver
@@ -348,7 +342,6 @@ def execute_bulk_code(req: BulkRunRequest):
         safe_input = tc.input if tc.input else ""
         actual_output = run_in_sandbox(req.language, full_execution_code, safe_input).strip()
         expected = tc.expected_output.strip()
-        
         passed = (actual_output == expected)
         
         results.append({
