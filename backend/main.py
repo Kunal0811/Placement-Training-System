@@ -264,7 +264,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # --- CORS Middleware ---
 # Change this block in main.py
 origins = [
-    "https://placement-training-system-55wp.vercel.app"
+    "https://placify-pro.vercel.app"
 ]
 
 app.add_middleware(
