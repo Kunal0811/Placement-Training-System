@@ -2,7 +2,7 @@ fastapi
 uvicorn[standard]
 python-dotenv
 pydantic
-google-generativeai
+google-genai
 python-jose
 passlib
 mysql-connector-python
@@ -13,3 +13,4 @@ pdfplumber
 python-docx
 spacy
 SQLAlchemy
+PyMuPDF
