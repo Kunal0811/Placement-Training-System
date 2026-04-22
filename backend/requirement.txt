@@ -14,3 +14,4 @@ python-docx
 spacy
 SQLAlchemy
 PyMuPDF
+docker
