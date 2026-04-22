@@ -11,7 +11,7 @@ load_dotenv()
 
 # --- Configuration ---
 DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "3306")  # 🔥 Added Port variable
+DB_PORT = os.getenv("DB_PORT", "3306")
 DB_USER = os.getenv("DB_USER", "root")
 DB_PASSWORD = os.getenv("DB_PASSWORD", "")
 DB_NAME = os.getenv("DB_NAME", "placify")
@@ -19,20 +19,23 @@ DB_NAME = os.getenv("DB_NAME", "placify")
 # 1. Config for Legacy (mysql.connector)
 db_config = {
     "host": DB_HOST,
-    "port": int(DB_PORT),  # 🔥 Pass the integer port
+    "port": int(DB_PORT),
     "user": DB_USER,
     "password": DB_PASSWORD,
     "database": DB_NAME,
-    "ssl_disabled": False  # 🔥 Aiven strictly requires SSL
+    "ssl_disabled": False  # Crucial for Aiven
 }
 
 # 2. Config for SQLAlchemy
-# 🔥 Added port injection and SSL flag to the connection string
-SQLALCHEMY_DATABASE_URL = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}?ssl_disabled=False"
+SQLALCHEMY_DATABASE_URL = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
 
-# --- SQLAlchemy Setup (For Interview Module) ---
-# Added pool_pre_ping=True to prevent cloud connection drops
-engine = create_engine(SQLALCHEMY_DATABASE_URL, pool_pre_ping=True)
+# --- SQLAlchemy Setup ---
+# 🔥 THE FIX: We MUST pass connect_args to force the driver to use SSL
+engine = create_engine(
+    SQLALCHEMY_DATABASE_URL, 
+    pool_pre_ping=True,
+    connect_args={"ssl_disabled": False} 
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
