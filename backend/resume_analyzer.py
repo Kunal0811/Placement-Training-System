@@ -43,6 +43,7 @@ def extract_text_from_file(file_bytes: bytes, filename: str) -> str:
             print(f"DOCX extraction failed: {e}")
     
     # Clean up horizontal whitespace (spaces/tabs) but PRESERVE newlines
+    # Correct regex to preserve newlines
     return re.sub(r'[^\S\n]+', ' ', text).strip()
 
 async def analyze_resume_ml(resume_text: str, jd_text: str):
