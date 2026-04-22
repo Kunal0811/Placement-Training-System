@@ -134,14 +134,27 @@ class ResetPasswordWithIDRequest(BaseModel):
 
 # ---- Utility Functions ----
 def send_email(to_email: str, subject: str, body: str):
-    msg = EmailMessage()
-    msg["Subject"] = subject
-    msg["From"] = os.getenv("EMAIL_USER")
-    msg["To"] = to_email
-    msg.set_content(body)
-    with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
-        smtp.login(os.getenv("EMAIL_USER"), os.getenv("EMAIL_PASS"))
-        smtp.send_message(msg)
+    email_user = os.getenv("EMAIL_USER")
+    email_pass = os.getenv("EMAIL_PASS")
+    
+    if not email_user or not email_pass:
+        print("CRITICAL: EMAIL_USER or EMAIL_PASS environment variables are missing in Render!")
+        raise HTTPException(status_code=500, detail="Server email configuration is missing.")
+
+    try:
+        msg = EmailMessage()
+        msg["Subject"] = subject
+        msg["From"] = email_user
+        msg["To"] = to_email
+        msg.set_content(body)
+        
+        with smtplib.SMTP_SSL("smtp.gmail.com", 465) as smtp:
+            smtp.login(email_user, email_pass)
+            smtp.send_message(msg)
+            
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+        raise HTTPException(status_code=500, detail="Failed to send email. Check Gmail App Password.")
 
 def validate_password(password: str):
     if len(password) < 8: return False, "Password must be at least 8 characters long"
