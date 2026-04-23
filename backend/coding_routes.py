@@ -122,15 +122,21 @@ def create_session_evaluation_prompt(submissions: List[Dict[str, str]], difficul
     ]
     """
 
-# --- PISTON CLOUD FALLBACK FUNCTION ---
-def run_in_piston(language: str, code: str, stdin: str) -> str:
-    """Executes code using the free Piston API when Docker is unavailable (e.g., on Render)."""
-    # FIX: We use "*" for the version so Piston automatically uses the latest available compiler
+# --- JDOODLE CLOUD FALLBACK FUNCTION ---
+def run_in_cloud(language: str, code: str, stdin: str) -> str:
+    """Executes code using the free JDoodle API when Docker is unavailable."""
+    client_id = os.getenv("JDOODLE_CLIENT_ID")
+    client_secret = os.getenv("JDOODLE_CLIENT_SECRET")
+
+    if not client_id or not client_secret:
+        return "System Error: JDoodle API keys are missing. Please add them to your .env or Render environment variables."
+
+    # JDoodle language codes and versions
     lang_map = {
-        "python": {"language": "python", "version": "*"},
-        "c": {"language": "c", "version": "*"},
-        "cpp": {"language": "c++", "version": "*"},
-        "java": {"language": "java", "version": "*"}
+        "python": {"language": "python3", "versionIndex": "4"}, # Python 3.9
+        "c": {"language": "c", "versionIndex": "5"},            # GCC 11
+        "cpp": {"language": "cpp", "versionIndex": "5"},        # G++ 11
+        "java": {"language": "java", "versionIndex": "4"}       # JDK 17
     }
 
     lang_key = language.lower()
@@ -140,31 +146,27 @@ def run_in_piston(language: str, code: str, stdin: str) -> str:
     lang_config = lang_map[lang_key]
 
     payload = {
-        "language": lang_config["language"],
-        "version": lang_config["version"],
-        "files": [{"name": f"main.{lang_key}", "content": code}],
+        "clientId": client_id,
+        "clientSecret": client_secret,
+        "script": code,
         "stdin": stdin,
-        "compile_timeout": 10000,
-        "run_timeout": 3000,
+        "language": lang_config["language"],
+        "versionIndex": lang_config["versionIndex"]
     }
 
     try:
-        response = requests.post("https://emkc.org/api/v2/piston/execute", json=payload, timeout=15)
+        response = requests.post("https://api.jdoodle.com/v1/execute", json=payload, timeout=15)
         data = response.json()
         
-        # SAFETY NET: If Piston returns an error message directly (e.g. rate limit, bad payload)
-        if "message" in data:
-            return f"Piston API Error: {data['message']}"
-        
-        # Return compilation errors if they exist (for C++ / Java)
-        if "compile" in data and data["compile"]["code"] != 0:
-            return data["compile"]["output"]
+        # Catch API Authentication or Limit Errors
+        if "error" in data:
+            return f"JDoodle API Error: {data['error']}"
             
-        # Return standard execution output
-        if "run" in data:
-            return data["run"]["output"]
+        # Catch standard execution responses
+        if data.get("statusCode") == 200:
+            return data.get("output", "No output generated.")
         else:
-            return f"Unexpected response from execution engine: {data}"
+            return f"Execution Failed: {data.get('output', 'Unknown Error')}"
             
     except Exception as e:
         return f"Cloud Code Execution Engine failed: {e}"
@@ -370,9 +372,9 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
             return "Execution Timed Out (10 seconds limit)."
             
     except docker.errors.DockerException:
-        # 2. DOCKER FAILED (e.g. running on Render cloud) -> FALLBACK TO CLOUD API
-        print("Docker daemon not found. Falling back to Cloud Piston API...")
-        return run_in_piston(language, code, stdin)
+        # 2. DOCKER FAILED (e.g. running on Render cloud) -> FALLBACK TO JDOODLE
+        print("Docker daemon not found. Falling back to JDoodle Cloud API...")
+        return run_in_cloud(language, code, stdin)
         
     except Exception as e:
         return str(e)
