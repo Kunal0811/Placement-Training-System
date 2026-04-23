@@ -125,11 +125,12 @@ def create_session_evaluation_prompt(submissions: List[Dict[str, str]], difficul
 # --- PISTON CLOUD FALLBACK FUNCTION ---
 def run_in_piston(language: str, code: str, stdin: str) -> str:
     """Executes code using the free Piston API when Docker is unavailable (e.g., on Render)."""
+    # FIX: We use "*" for the version so Piston automatically uses the latest available compiler
     lang_map = {
-        "python": {"language": "python", "version": "3.10.0"},
-        "c": {"language": "c", "version": "10.2.0"},
-        "cpp": {"language": "c++", "version": "10.2.0"},
-        "java": {"language": "java", "version": "15.0.2"}
+        "python": {"language": "python", "version": "*"},
+        "c": {"language": "c", "version": "*"},
+        "cpp": {"language": "c++", "version": "*"},
+        "java": {"language": "java", "version": "*"}
     }
 
     lang_key = language.lower()
@@ -151,12 +152,20 @@ def run_in_piston(language: str, code: str, stdin: str) -> str:
         response = requests.post("https://emkc.org/api/v2/piston/execute", json=payload, timeout=15)
         data = response.json()
         
-        # Return compilation errors if they exist
+        # SAFETY NET: If Piston returns an error message directly (e.g. rate limit, bad payload)
+        if "message" in data:
+            return f"Piston API Error: {data['message']}"
+        
+        # Return compilation errors if they exist (for C++ / Java)
         if "compile" in data and data["compile"]["code"] != 0:
             return data["compile"]["output"]
             
         # Return standard execution output
-        return data["run"]["output"]
+        if "run" in data:
+            return data["run"]["output"]
+        else:
+            return f"Unexpected response from execution engine: {data}"
+            
     except Exception as e:
         return f"Cloud Code Execution Engine failed: {e}"
 
