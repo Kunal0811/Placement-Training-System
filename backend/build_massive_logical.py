@@ -76,7 +76,7 @@ async def main():
     api_key = os.getenv("GEMINI_API_KEY_Logical") or os.getenv("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
     
-    runs = ["medium"]
+    runs = ["hard"]
     
     print(f"🚀 Starting {MODULE_NAME} Miner (Batch Size: {BATCH_SIZE})...")
     while True:
@@ -84,7 +84,7 @@ async def main():
             for diff in runs:
                 print(f"Mining {BATCH_SIZE} {diff} Qs for '{topic}'...")
                 try:
-                    res = await client.aio.models.generate_content(model="gemini-2.5-flash", contents=generate_prompt(topic, diff))
+                    res = await client.aio.models.generate_content(model="gemini-2.5-flash-lite", contents=generate_prompt(topic, diff))
                     match = re.search(r'\[\s*\{.*?\}\s*\]', res.text or "", re.DOTALL)
                     if match:
                         clean_json = match.group(0)

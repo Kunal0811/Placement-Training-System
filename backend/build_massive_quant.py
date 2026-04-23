@@ -1,5 +1,4 @@
-# backend/build_massive_quant.py
-import os, json, asyncio, re, ast
+import os, json, asyncio, re
 from google import genai
 from dotenv import load_dotenv
 
@@ -9,7 +8,7 @@ MODULE_NAME = "Quantitative Aptitude"
 
 # 🚀 SPEED UP TWEAKS:
 BATCH_SIZE = 30  # Number of questions to generate per API call
-SLEEP_TIME = 60  # Wait time between calls (lower if your API tier allows)
+SLEEP_TIME = 60  # Wait time between calls to prevent rate limits
 
 TARGET_TOPICS = [
     "Number System",
@@ -72,7 +71,7 @@ async def main():
     api_key = os.getenv("GEMINI_API_KEY_QUANT") or os.getenv("GEMINI_API_KEY")
     client = genai.Client(api_key=api_key)
     
-    runs = ["medium"]
+    runs = ["hard"]
     
     print(f"🚀 Starting {MODULE_NAME} Miner (Batch Size: {BATCH_SIZE})...")
     while True:
@@ -80,30 +79,30 @@ async def main():
             for diff in runs:
                 print(f"Mining {BATCH_SIZE} {diff} Qs for '{topic}'...")
                 try:
-                    res = await client.aio.models.generate_content(model="gemini-2.5-flash", contents=generate_prompt(topic, diff))
-                    match = re.search(r'\[\s*\{.*?\}\s*\]', res.text or "", re.DOTALL)
-                    if match:
-                        clean_json = match.group(0)
-                        data = []
-                        try: data = json.loads(clean_json, strict=False)
-                        except:
-                            try:
-                                flat_json = clean_json.replace('\n', ' ').replace('\r', '')
-                                data = json.loads(flat_json)
-                            except:
-                                try: data = ast.literal_eval(clean_json.replace("true", "True").replace("false", "False"))
-                                except: pass
+                    # Upgrade to 2.5-flash and FORCE JSON response
+                    res = await client.aio.models.generate_content(
+                        model="gemini-2.5-flash-lite", 
+                        contents=generate_prompt(topic, diff),
+                        config={"response_mime_type": "application/json"} # <-- THIS FIXES EVERYTHING
+                    )
+                    
+                    # Because of the config above, res.text is guaranteed to be a clean JSON string!
+                    data = json.loads(res.text)
+                    
+                    valid_qs = [q for q in data if isinstance(q, dict) and len(q.get("options", [])) == 4]
+                    
+                    if valid_qs: 
+                        print(f"✅ Successfully parsed {len(valid_qs)} questions!")
+                        save_to_dataset(valid_qs)
+                    else:
+                        print("⚠️ AI generated JSON, but no valid questions matched your format rules.")
                         
-                        valid_qs = [q for q in data if isinstance(q, dict) and len(q.get("options", [])) == 4]
-                        if valid_qs: 
-                            print(f"✅ Successfully parsed {len(valid_qs)} questions!")
-                            save_to_dataset(valid_qs)
-                        else:
-                            print("⚠️ AI generated response, but no valid questions were found.")
+                except json.JSONDecodeError:
+                    print("⚠️ Failed to parse JSON response from Gemini.")
                 except Exception as e: 
-                    print(f"⚠️ Error: {e}")
+                    print(f"⚠️ API Error: {e}")
                 
-                # Sleep briefly to avoid hitting Gemini rate limits (adjust based on your tier)
                 await asyncio.sleep(SLEEP_TIME)
 
-if __name__ == "__main__": asyncio.run(main())
+if __name__ == "__main__": 
+    asyncio.run(main())

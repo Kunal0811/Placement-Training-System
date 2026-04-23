@@ -3,6 +3,7 @@ import re
 import json
 import uuid
 import shutil
+import requests # <-- ADDED FOR CLOUD API
 from typing import List, Dict
 from fastapi import APIRouter, HTTPException, Depends
 from google import genai 
@@ -120,6 +121,45 @@ def create_session_evaluation_prompt(submissions: List[Dict[str, str]], difficul
       }}
     ]
     """
+
+# --- PISTON CLOUD FALLBACK FUNCTION ---
+def run_in_piston(language: str, code: str, stdin: str) -> str:
+    """Executes code using the free Piston API when Docker is unavailable (e.g., on Render)."""
+    lang_map = {
+        "python": {"language": "python", "version": "3.10.0"},
+        "c": {"language": "c", "version": "10.2.0"},
+        "cpp": {"language": "c++", "version": "10.2.0"},
+        "java": {"language": "java", "version": "15.0.2"}
+    }
+
+    lang_key = language.lower()
+    if lang_key not in lang_map:
+        return f"Language {language} not supported by Cloud Engine."
+
+    lang_config = lang_map[lang_key]
+
+    payload = {
+        "language": lang_config["language"],
+        "version": lang_config["version"],
+        "files": [{"name": f"main.{lang_key}", "content": code}],
+        "stdin": stdin,
+        "compile_timeout": 10000,
+        "run_timeout": 3000,
+    }
+
+    try:
+        response = requests.post("https://emkc.org/api/v2/piston/execute", json=payload, timeout=15)
+        data = response.json()
+        
+        # Return compilation errors if they exist
+        if "compile" in data and data["compile"]["code"] != 0:
+            return data["compile"]["output"]
+            
+        # Return standard execution output
+        return data["run"]["output"]
+    except Exception as e:
+        return f"Cloud Code Execution Engine failed: {e}"
+
 
 # --- 2. Routes ---
 
@@ -296,9 +336,8 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
     abs_temp_dir = os.path.abspath(temp_dir)
     image_name = f"placify-{language}-runner"
 
-    # 🔥 FIX: Move Docker client initialization INSIDE the function
-    # This prevents the application from crashing on startup when Docker is missing (like on Render)
     try:
+        # 1. TRY LOCAL DOCKER EXECUTION FIRST
         client = docker.from_env()
         
         container = client.containers.run(
@@ -322,7 +361,10 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
             return "Execution Timed Out (10 seconds limit)."
             
     except docker.errors.DockerException:
-        return "Feature Unavailable: The coding sandbox requires Docker. This feature is only available in local development mode."
+        # 2. DOCKER FAILED (e.g. running on Render cloud) -> FALLBACK TO CLOUD API
+        print("Docker daemon not found. Falling back to Cloud Piston API...")
+        return run_in_piston(language, code, stdin)
+        
     except Exception as e:
         return str(e)
     finally:
