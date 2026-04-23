@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_BASE ="http://localhost:8000"; // Change this to your backend URL
+const API_BASE ="https://placify-backend-q4o3.onrender.com"; // Change this to your backend URL
 export default API_BASE;
 
 // ---- Auth ----
