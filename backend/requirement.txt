@@ -7,6 +7,8 @@ google-genai
 python-jose
 passlib
 argon2-cffi
+passlib==1.7.4
+bcrypt==3.2.2
 mysql-connector-python
 nltk
 scikit-learn
