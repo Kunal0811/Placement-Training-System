@@ -202,7 +202,9 @@ async def generate_test_background(test_id: int, req: ScheduleTestReq):
             host=os.getenv("DB_HOST", "localhost"),
             user=os.getenv("DB_USER", "root"),
             password=os.getenv("DB_PASSWORD", ""),
-            database=os.getenv("DB_NAME", "placify")
+            database=os.getenv("DB_NAME", "placify"),
+            port=int(os.getenv("DB_PORT", 3306)),  # <-- ADD THIS
+            ssl_disabled=False                     # <-- ADD THIS
         )
         cursor = db.cursor(dictionary=True)
         
@@ -306,8 +308,12 @@ async def generate_coding_test_background(test_id: int, req: ScheduleTestReq):
 
     try:
         db = mysql.connector.connect(
-            host=os.getenv("DB_HOST", "localhost"), user=os.getenv("DB_USER", "root"),
-            password=os.getenv("DB_PASSWORD", ""), database=os.getenv("DB_NAME", "placify")
+            host=os.getenv("DB_HOST", "localhost"), 
+            user=os.getenv("DB_USER", "root"),
+            password=os.getenv("DB_PASSWORD", ""), 
+            database=os.getenv("DB_NAME", "placify"),
+            port=int(os.getenv("DB_PORT", 3306)),  # <-- ADD THIS
+            ssl_disabled=False                     # <-- ADD THIS
         )
         cursor = db.cursor(dictionary=True)
         cursor.execute("UPDATE scheduled_tests SET questions = %s WHERE id = %s", (json.dumps(all_questions), test_id))
