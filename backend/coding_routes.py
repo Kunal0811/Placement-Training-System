@@ -3,7 +3,7 @@ import re
 import json
 import uuid
 import shutil
-import requests # <-- ADDED FOR CLOUD API
+import requests # REQUIRED FOR CLOUD API
 from typing import List, Dict
 from fastapi import APIRouter, HTTPException, Depends
 from google import genai 
@@ -131,38 +131,34 @@ def run_in_cloud(language: str, code: str, stdin: str) -> str:
     if not client_id or not client_secret:
         return "System Error: JDoodle API keys are missing. Please add them to your .env or Render environment variables."
 
-    # JDoodle language codes and versions
     lang_map = {
-        "python": {"language": "python3", "versionIndex": "4"}, # Python 3.9
-        "c": {"language": "c", "versionIndex": "5"},            # GCC 11
-        "cpp": {"language": "cpp", "versionIndex": "5"},        # G++ 11
-        "java": {"language": "java", "versionIndex": "4"}       # JDK 17
+        "python": {"language": "python3", "versionIndex": "4"}, 
+        "c": {"language": "c", "versionIndex": "5"},            
+        "cpp": {"language": "cpp", "versionIndex": "5"},        
+        "java": {"language": "java", "versionIndex": "4"}       
     }
 
     lang_key = language.lower()
     if lang_key not in lang_map:
         return f"Language {language} not supported by Cloud Engine."
 
-    lang_config = lang_map[lang_key]
-
     payload = {
         "clientId": client_id,
         "clientSecret": client_secret,
         "script": code,
         "stdin": stdin,
-        "language": lang_config["language"],
-        "versionIndex": lang_config["versionIndex"]
+        "language": lang_map[lang_key]["language"],
+        "versionIndex": lang_map[lang_key]["versionIndex"]
     }
 
     try:
         response = requests.post("https://api.jdoodle.com/v1/execute", json=payload, timeout=15)
         data = response.json()
         
-        # Catch API Authentication or Limit Errors
-        if "error" in data:
+        # Explicit check to ignore `{"error": null}`
+        if "error" in data and data["error"] is not None:
             return f"JDoodle API Error: {data['error']}"
             
-        # Catch standard execution responses
         if data.get("statusCode") == 200:
             return data.get("output", "No output generated.")
         else:
@@ -170,7 +166,6 @@ def run_in_cloud(language: str, code: str, stdin: str) -> str:
             
     except Exception as e:
         return f"Cloud Code Execution Engine failed: {e}"
-
 
 # --- 2. Routes ---
 
@@ -311,7 +306,6 @@ def evaluate_session(req: SessionEvaluationRequest, db_cursor: tuple = Depends(g
 
 # --- Sandbox Execution ---
 def run_in_sandbox(language: str, code: str, stdin: str) -> str:
-    # Use the /tmp directory which is always writable in Linux environments like Render
     temp_dir = os.path.join("/tmp", str(uuid.uuid4()))
     try:
         os.makedirs(temp_dir, exist_ok=True)
@@ -348,7 +342,6 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
     image_name = f"placify-{language}-runner"
 
     try:
-        # 1. TRY LOCAL DOCKER EXECUTION FIRST
         client = docker.from_env()
         
         container = client.containers.run(
@@ -372,7 +365,6 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
             return "Execution Timed Out (10 seconds limit)."
             
     except docker.errors.DockerException:
-        # 2. DOCKER FAILED (e.g. running on Render cloud) -> FALLBACK TO JDOODLE
         print("Docker daemon not found. Falling back to JDoodle Cloud API...")
         return run_in_cloud(language, code, stdin)
         
