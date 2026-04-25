@@ -122,20 +122,16 @@ def create_session_evaluation_prompt(submissions: List[Dict[str, str]], difficul
     ]
     """
 
-# --- JDOODLE CLOUD FALLBACK FUNCTION ---
+# --- WANDBOX CLOUD FALLBACK FUNCTION (UNLIMITED & FREE) ---
 def run_in_cloud(language: str, code: str, stdin: str) -> str:
-    """Executes code using the free JDoodle API when Docker is unavailable."""
-    client_id = os.getenv("JDOODLE_CLIENT_ID")
-    client_secret = os.getenv("JDOODLE_CLIENT_SECRET")
-
-    if not client_id or not client_secret:
-        return "System Error: JDoodle API keys are missing. Please add them to your .env or Render environment variables."
-
+    """Executes code using the free Wandbox API. No API keys required."""
+    
+    # Wandbox uses highly specific compiler names
     lang_map = {
-        "python": {"language": "python3", "versionIndex": "4"}, 
-        "c": {"language": "c", "versionIndex": "5"},            
-        "cpp": {"language": "cpp", "versionIndex": "5"},        
-        "java": {"language": "java", "versionIndex": "4"}       
+        "python": "cpython-3.10.0", 
+        "c": "gcc-head-c",            
+        "cpp": "gcc-head",        
+        "java": "openjdk-jdk"       
     }
 
     lang_key = language.lower()
@@ -143,26 +139,26 @@ def run_in_cloud(language: str, code: str, stdin: str) -> str:
         return f"Language {language} not supported by Cloud Engine."
 
     payload = {
-        "clientId": client_id,
-        "clientSecret": client_secret,
-        "script": code,
-        "stdin": stdin,
-        "language": lang_map[lang_key]["language"],
-        "versionIndex": lang_map[lang_key]["versionIndex"]
+        "compiler": lang_map[lang_key],
+        "code": code,
+        "stdin": stdin
     }
 
     try:
-        response = requests.post("https://api.jdoodle.com/v1/execute", json=payload, timeout=15)
+        # Wandbox public endpoint (No Auth Required)
+        response = requests.post("https://wandbox.org/api/compile.json", json=payload, timeout=15)
         data = response.json()
         
-        # Explicit check to ignore `{"error": null}`
-        if "error" in data and data["error"] is not None:
-            return f"JDoodle API Error: {data['error']}"
+        # 1. Catch Compilation Errors (e.g., missing semicolons in C++/Java)
+        if data.get("compiler_error"):
+            return f"Compilation Error:\n{data['compiler_error']}"
             
-        if data.get("statusCode") == 200:
-            return data.get("output", "No output generated.")
-        else:
-            return f"Execution Failed: {data.get('output', 'Unknown Error')}"
+        # 2. Catch Runtime Errors (e.g., dividing by zero, index out of bounds)
+        if data.get("program_error"):
+            return f"Runtime Error:\n{data['program_error']}"
+            
+        # 3. Return Successful Output
+        return data.get("program_output", "No output generated.")
             
     except Exception as e:
         return f"Cloud Code Execution Engine failed: {e}"
