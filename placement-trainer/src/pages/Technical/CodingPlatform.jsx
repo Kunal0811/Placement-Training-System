@@ -411,24 +411,55 @@ export default function CodingPlatform() {
   const [panelTab, setPanelTab] = useState('cases'); // 'cases' | 'console'
   const [consoleLog, setConsoleLog] = useState([]);
   
-  // 🔥 NEW: Focus Mode State
-  const [isMaximized, setIsMaximized] = useState(false);
+  // 🔥 Fullscreen state (entire page, not just editor layout)
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const pageRef = useRef(null);
 
   const rawLevel = level || window.location.pathname.split('/').pop() || 'easy';
   const safeLevel = rawLevel.toLowerCase();
   const difficultyName = safeLevel.charAt(0).toUpperCase() + safeLevel.slice(1);
   const diffMeta = DIFF_META[safeLevel] || DIFF_META.easy;
 
-  // 🔥 NEW: Escape key to exit Focus Mode
+  // ── Fullscreen sync + keyboard shortcut (F) ───────────────────────────────
   useEffect(() => {
+    const syncFullscreenState = () => {
+      setIsFullscreen(Boolean(document.fullscreenElement));
+    };
+
     const handleKeyDown = (e) => {
-      if (e.key === 'Escape' && isMaximized) {
-        setIsMaximized(false);
+      // YouTube-style shortcut: press "f" to toggle fullscreen
+      if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const tag = document.activeElement?.tagName;
+        const isTyping = tag === 'INPUT' || tag === 'TEXTAREA' || document.activeElement?.isContentEditable;
+        if (!isTyping) {
+          e.preventDefault();
+          toggleFullscreen();
+        }
       }
     };
+
+    document.addEventListener('fullscreenchange', syncFullscreenState);
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isMaximized]);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', syncFullscreenState);
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement) {
+        const el = pageRef.current || document.documentElement;
+        if (el.requestFullscreen) await el.requestFullscreen();
+      } else if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      }
+    } catch (err) {
+      console.error('Fullscreen toggle failed:', err);
+      setConsoleLog(prev => [...prev, `✗ Fullscreen failed: ${err.message}`]);
+    }
+  };
 
   // ── fetch problems ────────────────────────────────────────────────────────
   useEffect(() => {
@@ -568,7 +599,7 @@ export default function CodingPlatform() {
 
   // ── coding UI ─────────────────────────────────────────────────────────────
   return (
-    <div className="h-screen bg-[#0D1117] text-white flex flex-col font-mono overflow-hidden print:hidden"
+    <div ref={pageRef} className="h-screen bg-[#0D1117] text-white flex flex-col font-mono overflow-hidden print:hidden"
       style={{ '--diff-color': diffMeta.color, '--diff-glow': diffMeta.glow }}>
 
       {/* ════════ TOP HEADER ════════ */}
@@ -634,8 +665,7 @@ export default function CodingPlatform() {
       {/* ════════ BODY ════════ */}
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ── Sidebar: problem list (Hidden in Maximize Mode) ── */}
-        {!isMaximized && (
+        {/* ── Sidebar: problem list ── */}
           <div className="hidden lg:flex w-52 flex-col bg-[#090d13] border-r border-white/8 shrink-0 transition-all duration-300">
             <div className="px-4 py-3 border-b border-white/8 flex items-center gap-2">
               <FiList className="text-gray-500 text-xs" />
@@ -658,10 +688,8 @@ export default function CodingPlatform() {
               ))}
             </div>
           </div>
-        )}
 
-        {/* ── Problem panel (Hidden in Maximize Mode) ── */}
-        {!isMaximized && (
+        {/* ── Problem panel ── */}
           <div className="w-full md:w-80 lg:w-96 flex flex-col border-r border-white/8 bg-[#0D1117] shrink-0 overflow-hidden transition-all duration-300">
             {/* mobile problem tabs */}
             <div className="flex gap-1 p-2 border-b border-white/8 md:hidden overflow-x-auto">
@@ -711,7 +739,6 @@ export default function CodingPlatform() {
               )}
             </div>
           </div>
-        )}
 
         {/* ── Editor + Results ── */}
         <div className="flex-1 flex flex-col min-w-0 bg-[#0D1117] overflow-hidden transition-all duration-300">
@@ -733,13 +760,13 @@ export default function CodingPlatform() {
             </div>
 
             <div className="flex items-center gap-3">
-              {/* 🔥 NEW: Maximize/Minimize Toggle Button */}
+              {/* Fullscreen toggle for entire coding page */}
               <button 
-                onClick={() => setIsMaximized(!isMaximized)}
+                onClick={toggleFullscreen}
                 className="p-1.5 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-colors hidden md:block"
-                title={isMaximized ? "Restore Layout (Esc)" : "Focus Mode"}
+                title={isFullscreen ? "Exit Fullscreen (Esc / F)" : "Enter Fullscreen (F)"}
               >
-                {isMaximized ? <FiMinimize className="text-lg" /> : <FiMaximize className="text-lg" />}
+                {isFullscreen ? <FiMinimize className="text-lg" /> : <FiMaximize className="text-lg" />}
               </button>
 
               <button onClick={handleRun} disabled={isRunning}
