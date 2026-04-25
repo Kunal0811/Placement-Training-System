@@ -264,7 +264,8 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # --- CORS Middleware ---
 # Change this block in main.py
 origins = [
-    "https://placify-pro.vercel.app"
+    # "http://localhost:5173",  # React dev server
+    "https://placify-pro.vercel.app",  # Deployed frontend
 ]
 
 app.add_middleware(

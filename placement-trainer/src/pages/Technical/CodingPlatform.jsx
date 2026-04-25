@@ -19,8 +19,7 @@ export default function CodingPlatform() {
     const timerRef = useRef(null);
 
     const [submissions, setSubmissions] = useState([]);
-    const [localInput, setLocalInput] = useState("");
-    const [localOutput, setLocalOutput] = useState("");
+    const [testResultsMap, setTestResultsMap] = useState({});
     const [isRunning, setIsRunning] = useState(false);
     
     // Report States
@@ -90,6 +89,7 @@ export default function CodingPlatform() {
         const newSubs = [...submissions];
         if (key === 'language') {
             newSubs[currentIndex].language = value;
+            setTestResultsMap(prev => ({ ...prev, [currentIndex]: [] }));
         } else if (key === 'code') {
             const activeLang = newSubs[currentIndex].language;
             newSubs[currentIndex].codes[activeLang] = value;
@@ -99,31 +99,46 @@ export default function CodingPlatform() {
 
     const handleRunLocal = async () => {
         const currentSub = submissions[currentIndex];
-        const activeCode = currentSub.codes[currentSub.language]; 
-        const currentProb = problems[currentIndex]; 
-        
+        const activeCode = currentSub.codes[currentSub.language];
+        const currentProb = problems[currentIndex];
+
         if (!activeCode.trim()) return;
-        
+
+        const examples = currentProb?.examples || [];
+        if (examples.length === 0) {
+            setTestResults([{ label: "No test cases", passed: null, actual_output: "No example test cases available for this problem.", expected_output: "" }]);
+            return;
+        }
+
         setIsRunning(true);
-        setLocalOutput("Running...");
-        
+        setTestResultsMap(prev => ({ ...prev, [currentIndex]: [] }));
+
         try {
             const hiddenDriverCode = currentProb?.driver_code?.[currentSub.language] || "";
+            const testCases = examples.map(ex => ({
+                input: ex.input,
+                expected_output: ex.output
+            }));
 
-            const res = await fetch(`${API_BASE}/api/coding/run-code`, {
+            const res = await fetch(`${API_BASE}/api/coding/execute-bulk`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ 
-                    language: currentSub.language, 
-                    code: activeCode, 
-                    input: localInput,
-                    driver_code: hiddenDriverCode
+                body: JSON.stringify({
+                    language: currentSub.language,
+                    code: activeCode,
+                    driver_code: hiddenDriverCode,
+                    test_cases: testCases
                 })
             });
             const data = await res.json();
-            setLocalOutput(data.output || "No output.");
+            const enriched = (data.results || []).map((r, i) => ({
+                ...r,
+                label: `Test Case ${i + 1}`,
+                input: examples[i]?.input
+            }));
+            setTestResultsMap(prev => ({ ...prev, [currentIndex]: enriched }));
         } catch (err) {
-            setLocalOutput(`Error: ${err.message}`);
+            setTestResultsMap(prev => ({ ...prev, [currentIndex]: [{ label: "Error", passed: false, actual_output: err.message, expected_output: "" }] }));
         } finally {
             setIsRunning(false);
         }
@@ -331,7 +346,7 @@ export default function CodingPlatform() {
                 </div>
 
                 <div className="mt-6 text-center shrink-0 print:hidden">
-                    <button onClick={() => navigate('/technical/levels')} className="px-8 py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-colors">
+                    <button onClick={() => navigate('/dashboard')} className="px-8 py-3 bg-white text-black font-bold rounded-xl hover:bg-gray-200 transition-colors">
                         Return to Dashboard
                     </button>
                 </div>
@@ -418,11 +433,16 @@ export default function CodingPlatform() {
                         {problems.map((p, idx) => (
                             <button
                                 key={idx}
-                                onClick={() => setCurrentIndex(idx)}
+                                onClick={() => { setCurrentIndex(idx); }}
                                 className={`w-full text-left px-4 py-3 rounded-xl transition-all text-sm font-medium flex items-center justify-between ${currentIndex === idx ? 'bg-neon-blue/20 text-neon-blue border border-neon-blue/30' : 'text-gray-400 hover:bg-white/5 hover:text-white'}`}
                             >
                                 <span className="truncate pr-2">{idx + 1}. {p.title}</span>
-                                {currentIndex === idx && <FiChevronRight/>}
+                                <span className="flex items-center gap-1 shrink-0">
+                                    {testResultsMap[idx]?.length > 0 && (
+                                        <span className={`w-2 h-2 rounded-full ${testResultsMap[idx].every(r => r.passed) ? 'bg-green-400' : testResultsMap[idx].some(r => r.passed) ? 'bg-yellow-400' : 'bg-red-400'}`} />
+                                    )}
+                                    {currentIndex === idx && <FiChevronRight/>}
+                                </span>
                             </button>
                         ))}
                     </div>
@@ -431,7 +451,7 @@ export default function CodingPlatform() {
                 <div className="w-full md:w-1/3 p-6 overflow-y-auto border-r border-white/10 custom-scrollbar shrink-0">
                     <div className="flex gap-2 mb-4 md:hidden overflow-x-auto pb-2">
                          {problems.map((_, idx) => (
-                            <button key={idx} onClick={() => setCurrentIndex(idx)} className={`px-4 py-1 rounded-full text-sm whitespace-nowrap ${currentIndex === idx ? 'bg-neon-blue text-black font-bold' : 'bg-gray-800 text-gray-400'}`}>
+                            <button key={idx} onClick={() => { setCurrentIndex(idx); }} className={`px-4 py-1 rounded-full text-sm whitespace-nowrap ${currentIndex === idx ? 'bg-neon-blue text-black font-bold' : 'bg-gray-800 text-gray-400'}`}>
                                 Prob {idx + 1}
                             </button>
                          ))}
@@ -499,26 +519,48 @@ export default function CodingPlatform() {
                     </div>
 
                     <div className="h-64 bg-[#161b22] border-t border-gray-800 flex flex-col shrink-0">
-                        <div className="flex border-b border-gray-800 bg-[#0d1117]">
-                            <div className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-widest border-r border-gray-800">Custom Input</div>
-                            <div className="px-4 py-2 text-xs font-bold text-gray-400 uppercase tracking-widest">Output</div>
+                        <div className="flex items-center justify-between px-4 border-b border-gray-800 bg-[#0d1117] h-10 shrink-0">
+                            <span className="text-xs font-bold text-gray-400 uppercase tracking-widest">Test Results</span>
+                            {(testResultsMap[currentIndex]?.length > 0) && (
+                                <span className="text-xs font-bold">
+                                    <span className="text-green-400">{testResultsMap[currentIndex].filter(r => r.passed).length} passed</span>
+                                    <span className="text-gray-600 mx-1">/</span>
+                                    <span className="text-gray-400">{testResultsMap[currentIndex].length} total</span>
+                                </span>
+                            )}
                         </div>
-                        <div className="flex-1 flex min-h-0">
-                            <textarea
-                                value={localInput}
-                                onChange={(e) => setLocalInput(e.target.value)}
-                                placeholder="Enter input here..."
-                                className="w-1/2 h-full bg-transparent text-gray-300 p-4 font-mono text-sm resize-none focus:outline-none border-r border-gray-800 custom-scrollbar"
-                            />
-                            <div className="w-1/2 h-full p-4 overflow-y-auto font-mono text-sm custom-scrollbar bg-black/20">
-                                {isRunning ? (
-                                    <span className="text-gray-500 animate-pulse">Executing...</span>
-                                ) : (
-                                    <pre className={localOutput.includes("Error") ? "text-red-400 whitespace-pre-wrap" : "text-green-400 whitespace-pre-wrap"}>
-                                        {localOutput || "Run code to see output..."}
-                                    </pre>
-                                )}
-                            </div>
+                        <div className="flex-1 overflow-y-auto p-3 space-y-2 custom-scrollbar">
+                            {isRunning ? (
+                                <div className="flex items-center gap-2 text-gray-400 text-sm animate-pulse p-2">
+                                    <FiClock className="animate-spin" /> Running against test cases...
+                                </div>
+                            ) : !testResultsMap[currentIndex] || testResultsMap[currentIndex].length === 0 ? (
+                                <p className="text-gray-600 text-sm p-2">Click "Run Code" to test against the example cases.</p>
+                            ) : (
+                                testResultsMap[currentIndex].map((r, i) => (
+                                    <div key={i} className={`rounded-lg border p-3 text-xs font-mono ${r.passed ? 'border-green-500/40 bg-green-500/5' : r.passed === null ? 'border-gray-600 bg-gray-800/40' : 'border-red-500/40 bg-red-500/5'}`}>
+                                        <div className="flex items-center gap-2 mb-2">
+                                            {r.passed === null ? (
+                                                <span className="text-gray-400 font-bold">{r.label}</span>
+                                            ) : r.passed ? (
+                                                <FiCheckCircle className="text-green-400 text-sm shrink-0" />
+                                            ) : (
+                                                <FiXCircle className="text-red-400 text-sm shrink-0" />
+                                            )}
+                                            <span className={`font-bold ${r.passed ? 'text-green-400' : r.passed === null ? 'text-gray-400' : 'text-red-400'}`}>
+                                                {r.label} {r.passed === true ? '— Passed' : r.passed === false ? '— Failed' : ''}
+                                            </span>
+                                        </div>
+                                        {r.input !== undefined && (
+                                            <div className="text-gray-500 mb-1"><span className="text-gray-400">Input:</span> {r.input}</div>
+                                        )}
+                                        <div className="text-gray-300"><span className="text-gray-400">Got:</span> {r.actual_output}</div>
+                                        {r.passed === false && (
+                                            <div className="text-gray-300 mt-1"><span className="text-gray-400">Expected:</span> {r.expected_output}</div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
                         </div>
                     </div>
                 </div>
