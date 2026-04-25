@@ -1,9 +1,11 @@
 import os
 import re
+import sys
 import json
 import uuid
 import shutil
-import requests # REQUIRED FOR CLOUD API
+import subprocess
+import requests 
 from typing import List, Dict
 from fastapi import APIRouter, HTTPException, Depends
 from google import genai 
@@ -51,7 +53,6 @@ class BulkRunRequest(BaseModel):
     driver_code: str = ""
 
 # --- 1. AI Generation Prompts ---
-
 def create_batch_problem_prompt(difficulty: str, solved_titles: List[str], count: int) -> str:
     avoid_str = ""
     if solved_titles:
@@ -60,8 +61,6 @@ def create_batch_problem_prompt(difficulty: str, solved_titles: List[str], count
     return f"""
     You are an expert technical interviewer. Generate exactly {count} distinct Data Structures and Algorithms (DSA) coding problems at the '{difficulty}' level.
     {avoid_str}
-
-    Ensure the problems require actual algorithmic thinking.
 
     Return STRICTLY a valid JSON array of objects. DO NOT wrap in markdown formatting.
     [
@@ -97,17 +96,14 @@ def create_session_evaluation_prompt(submissions: List[Dict[str, str]], difficul
     return f"""
     You are an expert code reviewer evaluating a candidate's coding session.
     The candidate submitted solutions for a batch of {difficulty} level DSA problems.
-
     Here are their submissions:
     {subs_text}
 
     Evaluate each submission. Determine if it is logically correct and solves the intended problem.
     Provide constructive feedback, highlighting mistakes or suggesting improvements.
-
     CRITICAL RULE: For the 'ideal_solution_snippets', you MUST provide the correct code snippet in Python, Java, AND C++.
 
     Return strictly a JSON array of objects. Do not use markdown blocks.
-    
     [
       {{
         "problem_title": "Title from the input",
@@ -122,53 +118,72 @@ def create_session_evaluation_prompt(submissions: List[Dict[str, str]], difficul
     ]
     """
 
-# --- CODEX CLOUD FALLBACK FUNCTION (UNLIMITED, FREE, NO VERSIONS) ---
-def run_in_cloud(language: str, code: str, stdin: str) -> str:
-    """Executes code using the free CodeX API. No API keys or compiler versions required."""
+# --- 2. UNLIMITED NATIVE PYTHON EXECUTOR ---
+def run_native_python(code: str, stdin: str) -> str:
+    """Runs Python code directly on Render. 0 Limits. 100% Free."""
+    temp_dir = os.path.join("/tmp", str(uuid.uuid4()))
+    os.makedirs(temp_dir, exist_ok=True)
+    file_path = os.path.join(temp_dir, "script.py")
     
-    # CodeX simple language mappings
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(code)
+        
+    try:
+        process = subprocess.run(
+            [sys.executable, file_path],
+            input=stdin,
+            capture_output=True,
+            text=True,
+            timeout=5 # 5 Second timeout stops infinite loops
+        )
+        if process.returncode != 0:
+            return f"Runtime Error:\n{process.stderr.strip()}"
+        
+        output = process.stdout.strip()
+        return output if output else "No output generated."
+    except subprocess.TimeoutExpired:
+        return "Execution Timed Out (5 seconds). Infinite loop detected."
+    except Exception as e:
+        return f"Native Execution Error: {e}"
+    finally:
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+# --- 3. WANDBOX CLOUD FALLBACK (PINNED VERSIONS) ---
+def run_in_cloud(language: str, code: str, stdin: str) -> str:
+    """Executes C/C++/Java using confirmed, pinned Wandbox compilers."""
     lang_map = {
-        "python": "py",
-        "c": "c",
-        "cpp": "cpp",
-        "java": "java"
+        "c": "gcc-13.2.0-c",            
+        "cpp": "gcc-13.2.0",        
+        "java": "openjdk-21"       
     }
 
     lang_key = language.lower()
     if lang_key not in lang_map:
         return f"Language {language} not supported by Cloud Engine."
 
-    # Most cloud APIs expect Java's public class to be named "Main"
-    if lang_key == "java":
-        code = code.replace("public class MyClass", "public class Main")
-
     payload = {
+        "compiler": lang_map[lang_key],
         "code": code,
-        "language": lang_map[lang_key],
-        "input": stdin
+        "stdin": stdin
     }
 
     try:
-        # CodeX Public API (Built for unlimited student usage)
-        response = requests.post("https://api.codex.jaagrav.in", json=payload, timeout=15)
-        
+        response = requests.post("https://wandbox.org/api/compile.json", json=payload, timeout=15)
         if response.status_code != 200:
             return f"Cloud Engine Error ({response.status_code}): {response.text[:250]}"
             
         data = response.json()
         
-        # 1. Catch Execution Errors (Syntax or Logic mistakes)
-        if data.get("error"):
-            return f"Execution Error:\n{data['error']}"
+        if data.get("compiler_error"):
+            return f"Compilation Error:\n{data['compiler_error']}"
+        if data.get("program_error"):
+            return f"Runtime Error:\n{data['program_error']}"
             
-        # 2. Return Successful Output
-        return data.get("output", "No output generated.")
-            
+        return data.get("program_output", "No output generated.").strip()
     except Exception as e:
         return f"Cloud Code Execution Engine failed: {e}"
 
-# --- 2. Routes ---
-
+# --- 4. Routes ---
 @router.post("/level-status")
 def get_level_status(req: LevelStatusRequest, db_cursor: tuple = Depends(get_cursor)):
     cursor, db = db_cursor
@@ -181,7 +196,6 @@ def get_level_status(req: LevelStatusRequest, db_cursor: tuple = Depends(get_cur
         count = result['solved_count'] if result else 0
         return {"solved_count": count}
     except Exception as e:
-        print(f"Error fetching level status: {e}")
         raise HTTPException(status_code=500, detail="Failed to fetch level status")
 
 @router.post("/generate-level")
@@ -197,13 +211,10 @@ def get_level_problems(req: LevelProblemRequest, db_cursor: tuple = Depends(get_
         "SELECT DISTINCT problem_title FROM coding_attempts WHERE user_id = %s AND LOWER(difficulty) = %s AND is_correct = 1",
         (req.user_id, req.difficulty.lower())
     )
-    solved_problems = cursor.fetchall()
-    solved_titles = [item['problem_title'] for item in solved_problems]
-
+    solved_titles = [item['problem_title'] for item in cursor.fetchall()]
     prompt = create_batch_problem_prompt(req.difficulty, solved_titles, req.count)
 
-    max_retries = 2
-    for attempt in range(max_retries):
+    for attempt in range(2):
         try:
             response = client.models.generate_content(
                 model="gemini-2.5-flash-lite",
@@ -217,27 +228,24 @@ def get_level_problems(req: LevelProblemRequest, db_cursor: tuple = Depends(get_
                 cleaned = cleaned[start_idx:end_idx+1]
                 
             problems_list = json.loads(cleaned)
-            
             if len(problems_list) > 0:
                  return {"problems": problems_list}
             else:
                  raise ValueError("AI returned empty list")
-
         except Exception as e:
-            if attempt == max_retries - 1:
-                print(f"Failed generation on last attempt: {e}")
+            if attempt == 1:
                 return {"problems": [{
                     "title": "Reverse String (Fallback)",
                     "description": "Write a function that reverses a string.",
                     "examples": [{"input": "hello", "output": "olleh"}],
                     "starter_code": {
                         "python": "def reverse_string(s):\n    # Write your code here\n    pass",
-                        "java": "class Solution {\n    public String reverseString(String s) {\n        # Write your code here\n        return \"\";\n    }\n}",
-                        "cpp": "class Solution {\npublic:\n    string reverseString(string s) {\n        # Write your code here\n        return \"\";\n    }\n};"
+                        "java": "class Solution {\n    public String reverseString(String s) {\n        return \"\";\n    }\n}",
+                        "cpp": "class Solution {\npublic:\n    string reverseString(string s) {\n        return \"\";\n    }\n};"
                     },
                     "driver_code": {
                         "python": "\nimport sys\nif __name__ == '__main__':\n    input_data = sys.stdin.read().strip()\n    if input_data:\n        print(reverse_string(input_data))",
-                        "java": "\nimport java.util.Scanner;\npublic class MyClass {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if(sc.hasNextLine()) {\n            String s = sc.nextLine();\n            Solution sol = new Solution();\n            System.out.println(sol.reverseString(s));\n        }\n    }\n}",
+                        "java": "\nimport java.util.Scanner;\npublic class MyClass {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        if(sc.hasNextLine()) {\n            Solution sol = new Solution();\n            System.out.println(sol.reverseString(sc.nextLine()));\n        }\n    }\n}",
                         "cpp": "\n#include <iostream>\n#include <string>\nusing namespace std;\nint main() {\n    string s;\n    if(getline(cin, s)) {\n        Solution sol;\n        cout << sol.reverseString(s) << endl;\n    }\n    return 0;\n}"
                     }
                 }]}
@@ -248,28 +256,27 @@ def run_code(req: RunCodeRequest):
         safe_code = req.code if req.code else ""
         safe_driver = req.driver_code if req.driver_code else ""
         safe_input = req.input if req.input else ""
-
         full_execution_code = safe_code + "\n" + safe_driver
+        
+        # 1. ALWAYS RUN PYTHON NATIVELY (Unlimited & Fast)
+        if req.language.lower() == "python":
+            return {"output": run_native_python(full_execution_code, safe_input)}
+            
+        # 2. RUN OTHERS IN WANDBOX CLOUD OR LOCAL DOCKER
         output = run_in_sandbox(req.language, full_execution_code, safe_input)
         return {"output": output}
     except Exception as e:
-        print(f"🔥 CRITICAL ERROR in /run-code: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/evaluate-session")
 def evaluate_session(req: SessionEvaluationRequest, db_cursor: tuple = Depends(get_cursor)):
     cursor, db = db_cursor
-    api_key = os.getenv("GEMINI_API_KEY_TECHNICAL") 
-    client = genai.Client(api_key=api_key)
-
+    client = genai.Client(api_key=os.getenv("GEMINI_API_KEY_TECHNICAL"))
     subs_data = [{"problem_title": s.problem_title, "code": s.code, "language": s.language} for s in req.submissions]
     prompt = create_session_evaluation_prompt(subs_data, req.difficulty)
 
     try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=prompt,
-        )
+        response = client.models.generate_content(model="gemini-2.5-flash-lite", contents=prompt)
         cleaned = response.text.replace("```json", "").replace("```", "").strip()
         start_idx = cleaned.find('[')
         end_idx = cleaned.rfind(']')
@@ -281,15 +288,12 @@ def evaluate_session(req: SessionEvaluationRequest, db_cursor: tuple = Depends(g
         total_correct = 0
         for res in evaluation_results:
             is_correct = 1 if res.get('is_correct') else 0
-            if is_correct:
-                total_correct += 1
-            
+            if is_correct: total_correct += 1
             cursor.execute("""
                 INSERT INTO coding_attempts (user_id, problem_title, difficulty, is_correct)
                 VALUES (%s, %s, %s, %s)
                 ON DUPLICATE KEY UPDATE is_correct = GREATEST(is_correct, VALUES(is_correct))
             """, (req.user_id, res.get('problem_title', 'Unknown'), req.difficulty.lower(), is_correct))
-        
         db.commit()
 
         return {
@@ -298,30 +302,17 @@ def evaluate_session(req: SessionEvaluationRequest, db_cursor: tuple = Depends(g
             "total_problems": len(req.submissions),
             "time_taken": req.time_taken
         }
-
     except Exception as e:
         db.rollback()
-        print(f"Evaluation Error: {e}")
         raise HTTPException(status_code=500, detail="Failed to evaluate session.")
 
-# --- Sandbox Execution ---
 def run_in_sandbox(language: str, code: str, stdin: str) -> str:
+    # 1. LOCAL DOCKER EXECUTION (For when you test on your laptop)
     temp_dir = os.path.join("/tmp", str(uuid.uuid4()))
-    try:
-        os.makedirs(temp_dir, exist_ok=True)
-    except Exception as e:
-        return f"System Error: Failed to create temp directory. {e}"
+    os.makedirs(temp_dir, exist_ok=True)
 
-    file_map = {
-        "python": "script.py",
-        "java": "MyClass.java",
-        "cpp": "script.cpp"
-    }
-    command_map = {
-        "python": "python script.py",
-        "java": "javac MyClass.java && java MyClass",
-        "cpp": "g++ script.cpp -o script && ./script"
-    }
+    file_map = {"python": "script.py", "java": "MyClass.java", "cpp": "script.cpp", "c": "script.c"}
+    command_map = {"python": "python script.py", "java": "javac MyClass.java && java MyClass", "cpp": "g++ script.cpp -o script && ./script", "c": "gcc script.c -o script && ./script"}
 
     file_name = file_map.get(language, "script.py")
     command = command_map.get(language, "python script.py")
@@ -330,67 +321,51 @@ def run_in_sandbox(language: str, code: str, stdin: str) -> str:
         if 'public class' in code and 'public class MyClass' not in code:
             code = re.sub(r'public class \w+', 'public class MyClass', code, count=1)
 
-    file_path = os.path.join(temp_dir, file_name)
-    with open(file_path, "w", encoding="utf-8") as f:
+    with open(os.path.join(temp_dir, file_name), "w", encoding="utf-8") as f:
         f.write(code)
-
-    input_path = os.path.join(temp_dir, "input.txt")
-    with open(input_path, "w", encoding="utf-8") as f:
+    with open(os.path.join(temp_dir, "input.txt"), "w", encoding="utf-8") as f:
         f.write(stdin)
-
-    abs_temp_dir = os.path.abspath(temp_dir)
-    image_name = f"placify-{language}-runner"
 
     try:
         client = docker.from_env()
-        
         container = client.containers.run(
-            image_name,
+            f"placify-{language}-runner",
             command=f"sh -c '{command} < input.txt'",
-            volumes={abs_temp_dir: {'bind': '/app', 'mode': 'rw'}},
-            working_dir='/app',
-            detach=True,
-            mem_limit='256m',
-            nano_cpus=int(1e9),
-            network_disabled=True,
+            volumes={os.path.abspath(temp_dir): {'bind': '/app', 'mode': 'rw'}},
+            working_dir='/app', detach=True, mem_limit='256m', nano_cpus=int(1e9), network_disabled=True,
         )    
         try:
             result = container.wait(timeout=10)
             logs = container.logs().decode('utf-8')
-            if result['StatusCode'] != 0:
-                return f"Runtime Error:\n{logs}"
-            return logs
-        except Exception as e:
+            return logs if result['StatusCode'] == 0 else f"Runtime Error:\n{logs}"
+        except Exception:
             container.kill()
             return "Execution Timed Out (10 seconds limit)."
-            
     except docker.errors.DockerException:
-        print("Docker daemon not found. Falling back to JDoodle Cloud API...")
+        # 2. DOCKER FAILED (Deployed to Render Cloud) -> Pinned Wandbox Fallback
         return run_in_cloud(language, code, stdin)
-        
     except Exception as e:
         return str(e)
     finally:
-        try:
-            shutil.rmtree(temp_dir)
-        except Exception:
-            pass
-        
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
 @router.post("/execute-bulk")
 def execute_bulk_code(req: BulkRunRequest):
     results = []
-    safe_code = req.code if req.code else ""
-    safe_driver = req.driver_code if req.driver_code else ""
-    full_execution_code = safe_code + "\n" + safe_driver
+    full_code = (req.code or "") + "\n" + (req.driver_code or "")
 
     for tc in req.test_cases:
         safe_input = tc.input if tc.input else ""
-        actual_output = run_in_sandbox(req.language, full_execution_code, safe_input).strip()
-        expected = tc.expected_output.strip()
-        passed = (actual_output == expected)
         
+        # Route Python to native executor, else use Sandbox logic
+        if req.language.lower() == "python":
+            actual_output = run_native_python(full_code, safe_input).strip()
+        else:
+            actual_output = run_in_sandbox(req.language, full_code, safe_input).strip()
+            
+        expected = tc.expected_output.strip()
         results.append({
-            "passed": passed,
+            "passed": (actual_output == expected),
             "actual_output": actual_output,
             "expected_output": expected
         })
