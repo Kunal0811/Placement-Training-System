@@ -12,13 +12,13 @@ const Sidebar = ({ isOpen }) => {
 
   const MENUS = [
     { title: "Home", path: "/", icon: <FiHome />, reqLevel: 1 },
-    { title: "Resume AI", path: "/resume-analyzer", icon: <FiFileText />, reqLevel: 1 },
     { title: "Aptitude Hub", path: "/aptitude", icon: <FiBookOpen />, reqLevel: 1 },
     { title: "Technical Hub", path: "/technical", icon: <FiCpu />, reqLevel: 1 },
     { title: "Mock Interview", path: "/interview", icon: <FiUserCheck />, reqLevel: 1 },
     { title: "Group Discussion", path: "/gd", icon: <FiUsers />, reqLevel: 1 },
     { title: "Scheduled Tests", path: "/tests",icon: "📃" },
     { title: "Resource Library", path: "/resources",icon: "📃" },
+    { title: "Resume AI", path: "/resume-analyzer", icon: <FiFileText />, reqLevel: 1 },
   ];
 
   const sidebarBg = "https://images.unsplash.com/photo-1639322537228-f710d846310a?q=80&w=1000&auto=format&fit=crop";

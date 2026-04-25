@@ -1,6 +1,7 @@
 import axios from "axios";
 
-const API_BASE = "https://placify-backend-q4o3.onrender.com"   //"http://127.0.0.1:8000"; // Change this to your backend URL
+const API_BASE = "https://placify-backend-q4o3.onrender.com";
+//const API_BASE = "http://127.0.0.1:8000";
 export default API_BASE;
 
 // ---- Auth ----
