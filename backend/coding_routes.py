@@ -126,11 +126,12 @@ def create_session_evaluation_prompt(submissions: List[Dict[str, str]], difficul
 def run_in_cloud(language: str, code: str, stdin: str) -> str:
     """Executes code using the free Wandbox API. No API keys required."""
     
+    # 🔥 THE FIX: Using "head" (latest) compilers so they never expire
     lang_map = {
-        "python": "cpython-3.11.2",
-        "c": "gcc-12.2.0",
-        "cpp": "gcc-12.2.0",
-        "java": "openjdk-17.0.6"
+        "python": "cpython-head",
+        "c": "gcc-head-c",
+        "cpp": "gcc-head",
+        "java": "openjdk-head"
     }
 
     lang_key = language.lower()
@@ -146,7 +147,7 @@ def run_in_cloud(language: str, code: str, stdin: str) -> str:
     try:
         response = requests.post("https://wandbox.org/api/compile.json", json=payload, timeout=15)
         
-        # 🔥 THE FIX: Check if the server crashed BEFORE parsing JSON
+        # Check if the server crashed BEFORE parsing JSON
         if response.status_code != 200:
             return f"Cloud Engine Error ({response.status_code}): {response.text[:250]}"
             
@@ -168,7 +169,7 @@ def run_in_cloud(language: str, code: str, stdin: str) -> str:
             
     except Exception as e:
         return f"Cloud Code Execution Engine failed: {e}"
-
+    
 # --- 2. Routes ---
 
 @router.post("/level-status")
