@@ -127,10 +127,10 @@ def run_in_cloud(language: str, code: str, stdin: str) -> str:
     """Executes code using the free Wandbox API. No API keys required."""
     
     lang_map = {
-        "python": "cpython-3.10.0", 
-        "c": "gcc-head-c",            
-        "cpp": "gcc-head",        
-        "java": "openjdk-jdk"       
+        "python": "cpython-3.11.2",
+        "c": "gcc-12.2.0",
+        "cpp": "gcc-12.2.0",
+        "java": "openjdk-17.0.6"
     }
 
     lang_key = language.lower()
