@@ -126,7 +126,6 @@ def create_session_evaluation_prompt(submissions: List[Dict[str, str]], difficul
 def run_in_cloud(language: str, code: str, stdin: str) -> str:
     """Executes code using the free Wandbox API. No API keys required."""
     
-    # Wandbox uses highly specific compiler names
     lang_map = {
         "python": "cpython-3.10.0", 
         "c": "gcc-head-c",            
@@ -145,15 +144,22 @@ def run_in_cloud(language: str, code: str, stdin: str) -> str:
     }
 
     try:
-        # Wandbox public endpoint (No Auth Required)
         response = requests.post("https://wandbox.org/api/compile.json", json=payload, timeout=15)
-        data = response.json()
         
-        # 1. Catch Compilation Errors (e.g., missing semicolons in C++/Java)
+        # 🔥 THE FIX: Check if the server crashed BEFORE parsing JSON
+        if response.status_code != 200:
+            return f"Cloud Engine Error ({response.status_code}): {response.text[:250]}"
+            
+        try:
+            data = response.json()
+        except json.JSONDecodeError:
+            return f"Cloud Engine returned invalid data: {response.text[:250]}"
+        
+        # 1. Catch Compilation Errors
         if data.get("compiler_error"):
             return f"Compilation Error:\n{data['compiler_error']}"
             
-        # 2. Catch Runtime Errors (e.g., dividing by zero, index out of bounds)
+        # 2. Catch Runtime Errors 
         if data.get("program_error"):
             return f"Runtime Error:\n{data['program_error']}"
             
