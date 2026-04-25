@@ -122,83 +122,47 @@ def create_session_evaluation_prompt(submissions: List[Dict[str, str]], difficul
     ]
     """
 
-# --- WANDBOX CLOUD FALLBACK FUNCTION (UNLIMITED & FREE) ---
-
-# Cache so we only ask Wandbox for versions once per server restart
-WANDBOX_COMPILERS = {}
-
-def get_wandbox_compiler(language: str) -> str:
-    """Dynamically fetches the latest STABLE compiler version directly from Wandbox."""
-    if language in WANDBOX_COMPILERS:
-        return WANDBOX_COMPILERS[language]
-
-    try:
-        # Ask Wandbox for a list of every compiler they currently have installed
-        res = requests.get("https://wandbox.org/api/list.json", timeout=5)
-        compilers = res.json()
-        
-        # Find the latest stable version for the requested language
-        for comp in reversed(compilers):  # Read backwards to get newest versions first
-            name = comp.get("compiler", "")
-            
-            # Skip broken 'head' or 'beta' versions to prevent catatonit crashes
-            if "head" in name or "beta" in name:
-                continue
-                
-            if language == "python" and "cpython-3" in name:
-                WANDBOX_COMPILERS["python"] = name
-                return name
-            elif language == "c" and "gcc-" in name and name.endswith("-c"):
-                WANDBOX_COMPILERS["c"] = name
-                return name
-            elif language == "cpp" and "gcc-" in name and not name.endswith("-c"):
-                WANDBOX_COMPILERS["cpp"] = name
-                return name
-            elif language == "java" and "openjdk-" in name:
-                WANDBOX_COMPILERS["java"] = name
-                return name
-    except Exception as e:
-        print(f"Failed to fetch compiler list: {e}")
-        
-    # Absolute safe fallbacks just in case the list API fails
-    fallbacks = {"python": "cpython-3.10.0", "c": "gcc-13.2.0-c", "cpp": "gcc-13.2.0", "java": "openjdk-21"}
-    return fallbacks.get(language, "")
-
+# --- CODEX CLOUD FALLBACK FUNCTION (UNLIMITED, FREE, NO VERSIONS) ---
 def run_in_cloud(language: str, code: str, stdin: str) -> str:
-    """Executes code using the free Wandbox API with Auto-Version detection."""
-    lang_key = language.lower()
-    compiler_name = get_wandbox_compiler(lang_key)
+    """Executes code using the free CodeX API. No API keys or compiler versions required."""
+    
+    # CodeX simple language mappings
+    lang_map = {
+        "python": "py",
+        "c": "c",
+        "cpp": "cpp",
+        "java": "java"
+    }
 
-    if not compiler_name:
+    lang_key = language.lower()
+    if lang_key not in lang_map:
         return f"Language {language} not supported by Cloud Engine."
 
+    # Most cloud APIs expect Java's public class to be named "Main"
+    if lang_key == "java":
+        code = code.replace("public class MyClass", "public class Main")
+
     payload = {
-        "compiler": compiler_name,
         "code": code,
-        "stdin": stdin
+        "language": lang_map[lang_key],
+        "input": stdin
     }
 
     try:
-        response = requests.post("https://wandbox.org/api/compile.json", json=payload, timeout=15)
+        # CodeX Public API (Built for unlimited student usage)
+        response = requests.post("https://api.codex.jaagrav.in", json=payload, timeout=15)
         
         if response.status_code != 200:
             return f"Cloud Engine Error ({response.status_code}): {response.text[:250]}"
             
-        try:
-            data = response.json()
-        except json.JSONDecodeError:
-            return f"Cloud Engine returned invalid data: {response.text[:250]}"
+        data = response.json()
         
-        # 1. Catch Compilation Errors (Syntax mistakes)
-        if data.get("compiler_error"):
-            return f"Compilation Error:\n{data['compiler_error']}"
+        # 1. Catch Execution Errors (Syntax or Logic mistakes)
+        if data.get("error"):
+            return f"Execution Error:\n{data['error']}"
             
-        # 2. Catch Runtime Errors (Logic mistakes)
-        if data.get("program_error"):
-            return f"Runtime Error:\n{data['program_error']}"
-            
-        # 3. Return Successful Output
-        return data.get("program_output", "No output generated.")
+        # 2. Return Successful Output
+        return data.get("output", "No output generated.")
             
     except Exception as e:
         return f"Cloud Code Execution Engine failed: {e}"
