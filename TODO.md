@@ -1,6 +1,0 @@
-- [ ] Change the key in PREP_CONTENT from dosDonts to do'sDont's
-- [ ] Change the tabs array from 'dosDonts' to 'do'sDont's'
-- [ ] Change activeTab === 'dosDonts' to activeTab === 'do'sDont's'
-- [ ] Change PREP_CONTENT.dosDonts.dos to PREP_CONTENT["do'sDont's"].dos
-- [ ] Change PREP_CONTENT.dosDonts.donts to PREP_CONTENT["do'sDont's"].donts
-- [ ] Update the tab display logic if needed
