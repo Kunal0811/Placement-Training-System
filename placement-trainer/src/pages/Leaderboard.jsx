@@ -1,219 +1,302 @@
-// placement-trainer/src/pages/Leaderboard.jsx
 import React, { useEffect, useState } from "react";
 import axios from "axios";
 import API_BASE from "../api";
 import { useAuth } from "../context/AuthContext";
-import { FiClock, FiChevronUp, FiChevronDown, FiShield } from "react-icons/fi";
+import { FiAward, FiSearch, FiCode, FiBookOpen, FiCpu, FiMic } from "react-icons/fi";
 
-// Simulate Duolingo Leagues based on User Level
-const LEAGUES = [
-  { name: "Bronze League", color: "text-amber-700", bg: "bg-amber-700/20", border: "border-amber-700/50", icon: "🥉" },
-  { name: "Silver League", color: "text-gray-300", bg: "bg-gray-300/20", border: "border-gray-300/50", icon: "🥈" },
-  { name: "Gold League", color: "text-yellow-400", bg: "bg-yellow-400/20", border: "border-yellow-400/50", icon: "🥇" },
-  { name: "Sapphire League", color: "text-blue-400", bg: "bg-blue-400/20", border: "border-blue-400/50", icon: "💎" },
-  { name: "Diamond League", color: "text-cyan-300", bg: "bg-cyan-300/20", border: "border-cyan-300/50", icon: "💠" },
+const CATEGORIES = [
+  { key: "global",    label: "Overall",   icon: FiAward,    color: "#a855f7" },
+  { key: "aptitude",  label: "Aptitude",  icon: FiBookOpen, color: "#f97316" },
+  { key: "technical", label: "Technical", icon: FiCpu,      color: "#3b82f6" },
+  { key: "coding",    label: "Coding",    icon: FiCode,     color: "#06b6d4" },
+  { key: "interview", label: "Interview", icon: FiMic,      color: "#ec4899" },
 ];
+
+const RANK_META = {
+  1: { emoji: "🥇", color: "#facc15", bg: "rgba(250,204,21,0.12)", border: "rgba(250,204,21,0.3)",  size: 52 },
+  2: { emoji: "🥈", color: "#e2e8f0", bg: "rgba(226,232,240,0.08)", border: "rgba(226,232,240,0.2)", size: 44 },
+  3: { emoji: "🥉", color: "#cd7c2f", bg: "rgba(205,124,47,0.1)",  border: "rgba(205,124,47,0.25)",  size: 40 },
+};
+
+function Avatar({ user, size = 40 }) {
+  const initial = (user?.name || user?.fname || "?")[0].toUpperCase();
+  if (user?.profile_picture_url) return (
+    <img src={`${API_BASE}${user.profile_picture_url}`} alt="avatar"
+      style={{ width: size, height: size, borderRadius: "50%", objectFit: "cover", flexShrink: 0 }} />
+  );
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: "50%", flexShrink: 0,
+      background: "linear-gradient(135deg,#a855f7,#ec4899)",
+      display: "flex", alignItems: "center", justifyContent: "center",
+      fontWeight: 800, fontSize: size * 0.38, color: "#fff",
+    }}>{initial}</div>
+  );
+}
+
+function PodiumCard({ user: u, rank, isYou }) {
+  const m = RANK_META[rank];
+  const name = u?.name || `${u?.fname || ""} ${u?.lname || ""}`.trim();
+  return (
+    <div style={{
+      display: "flex", flexDirection: "column", alignItems: "center", gap: 10,
+      order: rank === 1 ? 0 : rank === 2 ? -1 : 1,
+    }}>
+      <span style={{ fontSize: 28 }}>{m.emoji}</span>
+      <div style={{ position: "relative" }}>
+        <div style={{
+          width: m.size + 8, height: m.size + 8, borderRadius: "50%", padding: 3,
+          background: `linear-gradient(135deg, ${m.color}, transparent)`,
+          boxShadow: `0 0 20px ${m.color}40`,
+        }}>
+          <Avatar user={u} size={m.size} />
+        </div>
+        {isYou && (
+          <div style={{
+            position: "absolute", bottom: -4, left: "50%", transform: "translateX(-50%)",
+            background: "#a855f7", borderRadius: 999, padding: "1px 7px",
+            fontSize: 9, fontWeight: 800, color: "#fff", whiteSpace: "nowrap", border: "2px solid #07070a",
+          }}>YOU</div>
+        )}
+      </div>
+      <div style={{ textAlign: "center" }}>
+        <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", margin: 0, maxWidth: 90, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {name}
+        </p>
+        <p style={{ fontSize: 13, fontWeight: 800, color: m.color, margin: "3px 0 0", fontFamily: "monospace" }}>
+          {u?.xp?.toLocaleString() || 0} XP
+        </p>
+      </div>
+      {/* podium block */}
+      <div style={{
+        width: 72, borderRadius: "8px 8px 0 0", background: m.bg, border: `1px solid ${m.border}`,
+        height: rank === 1 ? 56 : rank === 2 ? 40 : 28,
+        display: "flex", alignItems: "center", justifyContent: "center",
+        fontSize: 16, fontWeight: 800, color: m.color,
+      }}>#{rank}</div>
+    </div>
+  );
+}
+
+function RankRow({ u, rank, isYou, catColor }) {
+  const name = u?.name || `${u?.fname || ""} ${u?.lname || ""}`.trim();
+  const m = RANK_META[rank];
+  return (
+    <div style={{
+      display: "flex", alignItems: "center", gap: 14, padding: "11px 16px",
+      borderRadius: 14, transition: "background 0.15s",
+      background: isYou ? `${catColor}10` : "transparent",
+      border: `1px solid ${isYou ? catColor + "35" : "transparent"}`,
+      boxShadow: isYou ? `0 0 20px ${catColor}12` : "none",
+    }}
+    onMouseEnter={e => { if (!isYou) e.currentTarget.style.background = "rgba(255,255,255,0.03)"; }}
+    onMouseLeave={e => { if (!isYou) e.currentTarget.style.background = "transparent"; }}
+    >
+      {/* rank */}
+      <div style={{
+        width: 28, textAlign: "center", flexShrink: 0,
+        fontFamily: "monospace", fontWeight: 800,
+        fontSize: m ? 18 : 13,
+        color: m ? m.color : "#4b5563",
+        textShadow: m ? `0 0 12px ${m.color}80` : "none",
+      }}>
+        {m ? m.emoji : rank}
+      </div>
+
+      {/* avatar */}
+      <Avatar user={u} size={36} />
+
+      {/* name + badges */}
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 14, fontWeight: 700, color: isYou ? "#fff" : "#d1d5db", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", maxWidth: 180 }}>
+            {name}
+          </span>
+          {isYou && (
+            <span style={{ fontSize: 9, fontWeight: 800, background: catColor, color: "#fff", padding: "2px 6px", borderRadius: 999 }}>YOU</span>
+          )}
+        </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 3, flexWrap: "wrap" }}>
+          {u.badges?.slice(0, 2).map((b, i) => (
+            <span key={i} style={{ fontSize: 10, color: "#4b5563", background: "rgba(255,255,255,0.04)", padding: "1px 6px", borderRadius: 4, border: "1px solid rgba(255,255,255,0.06)" }}>
+              {b}
+            </span>
+          ))}
+        </div>
+      </div>
+
+      {/* level */}
+      <div style={{ textAlign: "center", flexShrink: 0 }}>
+        <div style={{ fontSize: 10, color: "#374151", textTransform: "uppercase", letterSpacing: "0.08em" }}>Level</div>
+        <div style={{ fontSize: 15, fontWeight: 800, color: catColor }}>{u.level}</div>
+      </div>
+
+      {/* xp */}
+      <div style={{ textAlign: "right", flexShrink: 0, minWidth: 70 }}>
+        <span style={{ fontSize: 16, fontWeight: 800, color: isYou ? "#fff" : "#9ca3af", fontFamily: "monospace" }}>
+          {u.xp?.toLocaleString()}
+        </span>
+        <span style={{ fontSize: 10, color: "#374151", marginLeft: 3 }}>XP</span>
+      </div>
+    </div>
+  );
+}
 
 export default function Leaderboard() {
   const { user, stats } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [category, setCategory] = useState("global");
-  
-  // Countdown Timer Logic (Simulating weekly reset on Sunday midnight)
-  const [timeLeft, setTimeLeft] = useState({ days: 0, hours: 0 });
+  const [search, setSearch] = useState("");
+
+  const catMeta = CATEGORIES.find(c => c.key === category);
+  const catColor = catMeta?.color || "#a855f7";
 
   useEffect(() => {
-    const calculateTimeLeft = () => {
-      const now = new Date();
-      const nextSunday = new Date();
-      nextSunday.setDate(now.getDate() + (7 - now.getDay()));
-      nextSunday.setHours(23, 59, 59, 999);
-      
-      const diff = nextSunday - now;
-      const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-      setTimeLeft({ days, hours });
-    };
-    
-    calculateTimeLeft();
-    const timer = setInterval(calculateTimeLeft, 1000 * 60 * 60); // update every hour
-    return () => clearInterval(timer);
-  }, []);
-
-  useEffect(() => {
-    const fetchLeaderboard = async () => {
-      setLoading(true);
-      try {
-        const endpoint = category === "global" 
-            ? `${API_BASE}/api/leaderboard` 
-            : `${API_BASE}/api/leaderboard/filter?category=${category}`;
-            
-        const res = await axios.get(endpoint);
-        setUsers(res.data);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchLeaderboard();
+    setLoading(true);
+    const endpoint = category === "global"
+      ? `${API_BASE}/api/leaderboard`
+      : `${API_BASE}/api/leaderboard/filter?category=${category}`;
+    axios.get(endpoint)
+      .then(r => setUsers(r.data || []))
+      .catch(console.error)
+      .finally(() => setLoading(false));
   }, [category]);
 
-  // Determine user's simulated league based on their global level
-  const userLevel = stats?.level || 1;
-  const currentLeague = LEAGUES[Math.min(userLevel - 1, 4)];
+  const filtered = users.filter(u => {
+    const name = u.name || `${u.fname || ""} ${u.lname || ""}`;
+    return name.toLowerCase().includes(search.toLowerCase());
+  });
+
+  const top3 = filtered.slice(0, 3);
+  const rest = filtered.slice(3);
+  const myRow = filtered.find(u => u.id === user?.id);
+  const myRank = filtered.findIndex(u => u.id === user?.id) + 1;
+  const myNotInView = myRank > 3 && !rest.find(u => u.id === user?.id);
 
   return (
-    <div className="min-h-screen bg-game-bg text-white p-4 md:p-8 pb-32">
-      <div className="max-w-3xl mx-auto">
-        
-        {/* --- DUOLINGO LEAGUE HEADER --- */}
-        <div className="glass-panel rounded-3xl p-8 flex flex-col items-center justify-center text-center mb-10 border border-white/5 relative overflow-hidden bg-black/40">
-            {/* Background Glow */}
-            <div className={`absolute top-0 left-1/2 transform -translate-x-1/2 w-full h-full opacity-20 blur-[100px] ${currentLeague.bg}`}></div>
-            
-            <div className="text-8xl mb-4 relative z-10 animate-float drop-shadow-2xl">
-                {currentLeague.icon}
-            </div>
-            
-            <h1 className={`text-4xl font-black font-display tracking-tight relative z-10 ${currentLeague.color} drop-shadow-lg`}>
-                {currentLeague.name}
-            </h1>
-            
-            <div className="flex flex-col items-center mt-6 relative z-10">
-                <p className="text-gray-400 font-bold uppercase tracking-widest text-xs mb-2">Weekly Reset In</p>
-                <div className="flex items-center gap-2 bg-white/5 border border-white/10 px-5 py-2 rounded-xl text-lg font-mono text-neon-blue font-bold shadow-inner">
-                    <FiClock /> {timeLeft.days}d {timeLeft.hours}h
-                </div>
-            </div>
-        </div>
+    <div style={{ minHeight: "100vh", padding: "24px 16px 80px", maxWidth: 680, margin: "0 auto", fontFamily: "'DM Sans', sans-serif", color: "#e2e8f0" }}>
 
-        {/* --- CATEGORY PILLS --- */}
-        <div className="flex overflow-x-auto gap-3 mb-8 pb-2 custom-scrollbar justify-start md:justify-center">
-            {['global', 'aptitude', 'technical', 'coding', 'interview'].map(cat => (
-                <button 
-                    key={cat}
-                    onClick={() => setCategory(cat)}
-                    className={`whitespace-nowrap px-6 py-3 rounded-2xl font-black text-sm uppercase tracking-widest transition-all ${
-                        category === cat 
-                        ? 'bg-neon-blue text-black border-b-4 border-teal-600 hover:-translate-y-1 active:border-b-0 active:translate-y-1' 
-                        : 'bg-white/5 text-gray-400 border-b-4 border-transparent hover:bg-white/10'
-                    }`}
-                >
-                    {cat}
-                </button>
-            ))}
-        </div>
-
-        {/* --- LEADERBOARD LIST --- */}
-        {loading ? (
-            <div className="flex justify-center items-center h-48"><div className="w-12 h-12 border-4 border-neon-blue border-t-transparent rounded-full animate-spin"></div></div>
-        ) : (
-            <div className="space-y-1">
-                {users.map((u, index) => {
-                    const isPromotionZone = index < 5;
-                    const isDemotionZone = index >= users.length - 5 && users.length > 10;
-                    const isCurrentUser = user?.id === u.id;
-
-                    // Fallbacks for data format
-                    const displayName = u.name || u.fname || "Student";
-                    const initial = displayName[0] ? displayName[0].toUpperCase() : "U";
-                    const displayXP = u.xp !== undefined ? u.xp : (u.score || 0);
-                    const rank = u.rank || (index + 1);
-
-                    // Rank Color Logic
-                    let rankStyle = "text-gray-500 font-bold";
-                    if (rank === 1) rankStyle = "text-yellow-400 font-black text-xl drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]";
-                    if (rank === 2) rankStyle = "text-gray-300 font-black text-xl";
-                    if (rank === 3) rankStyle = "text-amber-600 font-black text-xl";
-
-                    return (
-                        <React.Fragment key={u.id || index}>
-                            
-                            {/* PROMOTION ZONE DIVIDER */}
-                            {index === 5 && (
-                                <div className="flex items-center gap-4 py-4 animate-fade-in">
-                                    <hr className="flex-1 border-green-500/30" />
-                                    <span className="flex items-center gap-2 text-green-500 font-black uppercase text-xs tracking-widest bg-green-500/10 px-4 py-1 rounded-full border border-green-500/20">
-                                        <FiChevronUp size={16}/> Promotion Zone
-                                    </span>
-                                    <hr className="flex-1 border-green-500/30" />
-                                </div>
-                            )}
-
-                            {/* DEMOTION ZONE DIVIDER */}
-                            {index === users.length - 5 && users.length > 10 && (
-                                <div className="flex items-center gap-4 py-4 mt-4 animate-fade-in">
-                                    <hr className="flex-1 border-red-500/30" />
-                                    <span className="flex items-center gap-2 text-red-500 font-black uppercase text-xs tracking-widest bg-red-500/10 px-4 py-1 rounded-full border border-red-500/20">
-                                        <FiChevronDown size={16}/> Demotion Zone
-                                    </span>
-                                    <hr className="flex-1 border-red-500/30" />
-                                </div>
-                            )}
-
-                            {/* USER ROW */}
-                            <div 
-                                className={`flex items-center gap-4 p-4 rounded-2xl transition-all ${
-                                    isCurrentUser 
-                                        ? 'bg-neon-blue/10 border-2 border-neon-blue/50 shadow-[0_0_20px_rgba(45,212,191,0.1)] scale-[1.02] z-10 relative' 
-                                        : 'bg-white/5 border border-transparent hover:bg-white/10'
-                                }`}
-                            >
-                                {/* Rank */}
-                                <div className={`w-8 text-center ${rankStyle}`}>
-                                    {rank}
-                                </div>
-
-                                {/* Avatar */}
-                                <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg overflow-hidden border-2 ${
-                                    isPromotionZone ? 'border-green-500' : isDemotionZone ? 'border-red-500' : 'border-gray-600'
-                                }`}>
-                                    {u.profile_picture_url ? (
-                                        <img src={`${API_BASE}${u.profile_picture_url}`} className="w-full h-full object-cover"/>
-                                    ) : (
-                                        <div className="w-full h-full bg-gray-800 flex items-center justify-center">{initial}</div>
-                                    )}
-                                </div>
-
-                                {/* Name & Badges */}
-                                <div className="flex-1 min-w-0">
-                                    <p className={`font-bold text-lg truncate ${isCurrentUser ? 'text-neon-blue' : 'text-white'}`}>
-                                        {displayName} {isCurrentUser && "(You)"}
-                                    </p>
-                                    <div className="flex gap-2 mt-1">
-                                        {u.badges?.slice(0, 1).map((badge, i) => (
-                                            <span key={i} className="text-[10px] bg-white/10 px-2 py-0.5 rounded text-gray-400 font-bold uppercase tracking-wider truncate">
-                                                {badge}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-
-                                {/* XP Score */}
-                                <div className="text-right">
-                                    <p className={`font-black text-xl ${isCurrentUser ? 'text-white' : 'text-gray-300'}`}>
-                                        {displayXP} <span className="text-xs text-gray-500 font-bold">XP</span>
-                                    </p>
-                                    {isPromotionZone && <p className="text-xs text-green-500 font-bold flex items-center justify-end gap-1"><FiChevronUp/> Advancing</p>}
-                                    {isDemotionZone && <p className="text-xs text-red-500 font-bold flex items-center justify-end gap-1"><FiChevronDown/> Falling</p>}
-                                </div>
-                            </div>
-                        </React.Fragment>
-                    );
-                })}
-
-                {users.length === 0 && (
-                    <div className="text-center p-12 bg-white/5 rounded-3xl border border-white/10">
-                        <FiShield className="text-6xl text-gray-600 mx-auto mb-4" />
-                        <h3 className="text-xl font-bold text-white mb-2">No data yet</h3>
-                        <p className="text-gray-400">Complete a lesson to join the league!</p>
-                    </div>
-                )}
-            </div>
-        )}
+      {/* header */}
+      <div style={{ marginBottom: 28 }}>
+        <h1 style={{ fontFamily: "'Syne', sans-serif", fontSize: "clamp(28px,5vw,40px)", fontWeight: 800, color: "#fff", margin: 0, letterSpacing: "-0.03em" }}>
+          Leaderboard
+        </h1>
+        <p style={{ color: "#4b5563", fontSize: 14, margin: "6px 0 0" }}>
+          Ranked by XP earned across all modules.
+        </p>
       </div>
+
+      {/* your rank banner — only if logged in and on leaderboard */}
+      {user && myRank > 0 && (
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12,
+          padding: "14px 18px", borderRadius: 16, marginBottom: 20,
+          background: `${catColor}10`, border: `1px solid ${catColor}30`,
+        }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <Avatar user={{ profile_picture_url: user.profile_picture_url, fname: user.fname }} size={36} />
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: "#fff", margin: 0 }}>{user.fname} {user.lname}</p>
+              <p style={{ fontSize: 11, color: "#4b5563", margin: 0 }}>Your current position</p>
+            </div>
+          </div>
+          <div style={{ textAlign: "right" }}>
+            <p style={{ fontSize: 22, fontWeight: 800, color: catColor, margin: 0, fontFamily: "monospace" }}>#{myRank}</p>
+            <p style={{ fontSize: 11, color: "#4b5563", margin: 0 }}>{myRow?.xp?.toLocaleString() || stats?.xp || 0} XP</p>
+          </div>
+        </div>
+      )}
+
+      {/* category tabs */}
+      <div style={{ display: "flex", gap: 6, overflowX: "auto", scrollbarWidth: "none", marginBottom: 24, paddingBottom: 4 }}>
+        {CATEGORIES.map(cat => {
+          const active = category === cat.key;
+          const Icon = cat.icon;
+          return (
+            <button key={cat.key} onClick={() => setCategory(cat.key)}
+              style={{
+                display: "flex", alignItems: "center", gap: 6, padding: "8px 16px", borderRadius: 12,
+                fontWeight: 700, fontSize: 13, cursor: "pointer", whiteSpace: "nowrap", flexShrink: 0,
+                background: active ? cat.color + "18" : "rgba(255,255,255,0.03)",
+                border: `1px solid ${active ? cat.color + "40" : "rgba(255,255,255,0.07)"}`,
+                color: active ? cat.color : "#4b5563",
+                transition: "all 0.15s",
+              }}>
+              <Icon size={13} /> {cat.label}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* search */}
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderRadius: 12, marginBottom: 24, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.07)" }}>
+        <FiSearch style={{ color: "#4b5563", flexShrink: 0 }} size={14} />
+        <input value={search} onChange={e => setSearch(e.target.value)}
+          placeholder="Search by name..."
+          style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: "#e2e8f0", fontSize: 14, fontFamily: "'DM Sans', sans-serif" }} />
+      </div>
+
+      {loading ? (
+        <div style={{ display: "flex", justifyContent: "center", padding: 60 }}>
+          <div style={{ width: 36, height: 36, border: `3px solid ${catColor}30`, borderTopColor: catColor, borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+        </div>
+      ) : filtered.length === 0 ? (
+        <div style={{ textAlign: "center", padding: 60, color: "#374151" }}>
+          <p style={{ fontSize: 16 }}>No results found.</p>
+        </div>
+      ) : (
+        <>
+          {/* PODIUM — top 3 */}
+          {top3.length >= 1 && !search && (
+            <div style={{
+              display: "flex", alignItems: "flex-end", justifyContent: "center", gap: 16,
+              padding: "28px 16px 0", marginBottom: 32,
+              background: "rgba(255,255,255,0.02)", borderRadius: 20, border: "1px solid rgba(255,255,255,0.06)",
+            }}>
+              {top3.map((u, i) => (
+                <PodiumCard key={u.id} user={u} rank={i + 1} isYou={u.id === user?.id} />
+              ))}
+            </div>
+          )}
+
+          {/* rank list — 4th onwards */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 3, marginTop: 8 }}>
+            {(search ? filtered : rest).map((u, i) => {
+              const rank = search ? (filtered.findIndex(x => x.id === u.id) + 1) : i + 4;
+              return (
+                <RankRow key={u.id || i} u={u} rank={rank} isYou={u.id === user?.id} catColor={catColor} />
+              );
+            })}
+          </div>
+
+          {/* pinned "you" row if not visible */}
+          {user && myRow && myRank > 3 + rest.length && !search && (
+            <>
+              <div style={{ display: "flex", alignItems: "center", gap: 12, padding: "16px 0 8px" }}>
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+                <span style={{ fontSize: 10, color: "#374151", textTransform: "uppercase", letterSpacing: "0.1em" }}>Your position</span>
+                <div style={{ flex: 1, height: 1, background: "rgba(255,255,255,0.06)" }} />
+              </div>
+              <RankRow u={myRow} rank={myRank} isYou catColor={catColor} />
+            </>
+          )}
+
+          {filtered.length === 0 && (
+            <div style={{ textAlign: "center", padding: "40px 0", color: "#374151" }}>
+              <p>No one on the board yet for this category. Be the first! 🚀</p>
+            </div>
+          )}
+        </>
+      )}
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM Sans:wght@400;600;700;800&display=swap');
+        @keyframes spin { to { transform: rotate(360deg); } }
+        * { box-sizing: border-box; }
+        input::placeholder { color: #374151; }
+        ::-webkit-scrollbar { display: none; }
+      `}</style>
     </div>
   );
 }

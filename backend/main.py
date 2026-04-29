@@ -465,14 +465,9 @@ def get_user_gamification(user_id: int, db_cursor: tuple = Depends(get_cursor)):
 def get_leaderboard(db_cursor: tuple = Depends(get_cursor)):
     cursor, db = db_cursor
     try:
-        # ANTI-FARMING: Global Leaderboard Query Fix
         query = """
         SELECT 
-            u.id, 
-            u.fname, 
-            u.lname, 
-            u.profile_picture_url,
-            
+            u.id, u.fname, u.lname, u.profile_picture_url,
             COALESCE((
                 SELECT SUM(
                     CASE WHEN mode = 'hard' THEN 40 WHEN mode = 'moderate' THEN 20 ELSE 10 END +
@@ -480,33 +475,29 @@ def get_leaderboard(db_cursor: tuple = Depends(get_cursor)):
                 )
                 FROM (
                     SELECT user_id, topic, mode, MAX(score) as max_score, MAX(total) as max_total
-                    FROM test_attempts
-                    GROUP BY user_id, topic, mode
-                ) t
-                WHERE t.user_id = u.id AND t.max_score >= 15
+                    FROM test_attempts GROUP BY user_id, topic, mode
+                ) t WHERE t.user_id = u.id AND t.max_score >= 15
             ), 0) as test_xp,
-            
             COALESCE((
                 SELECT SUM(CASE WHEN difficulty = 'hard' THEN 40 WHEN difficulty = 'medium' THEN 20 ELSE 10 END)
                 FROM (
-                    SELECT user_id, problem_title, difficulty
-                    FROM coding_attempts
-                    WHERE is_correct = 1
-                    GROUP BY user_id, problem_title, difficulty
-                ) c
-                WHERE c.user_id = u.id
+                    SELECT user_id, problem_title, difficulty FROM coding_attempts
+                    WHERE is_correct = 1 GROUP BY user_id, problem_title, difficulty
+                ) c WHERE c.user_id = u.id
             ), 0) as coding_xp,
-            
             COALESCE((
-                SELECT SUM(50 + (overall_score * 5)) 
-                FROM interview_sessions 
+                SELECT SUM(50 + (overall_score * 5)) FROM interview_sessions
                 WHERE user_id = u.id AND end_time IS NOT NULL
             ), 0) as interview_xp,
-            
             (SELECT COUNT(DISTINCT topic, mode) FROM test_attempts WHERE user_id = u.id AND score >= 15) as aptitude_tests,
             (SELECT COUNT(DISTINCT problem_title) FROM coding_attempts WHERE user_id = u.id AND is_correct = 1) as coding_solved,
-            (SELECT COUNT(*) FROM interview_sessions WHERE user_id = u.id AND end_time IS NOT NULL) as interviews
-            
+            (SELECT COUNT(*) FROM interview_sessions WHERE user_id = u.id AND end_time IS NOT NULL) as interviews,
+            (
+                SELECT COUNT(*) FROM (
+                    SELECT DATE(created_at) as d FROM test_attempts WHERE user_id = u.id
+                    UNION SELECT DATE(created_at) as d FROM coding_attempts WHERE user_id = u.id
+                ) daily WHERE d >= DATE_SUB(CURDATE(), INTERVAL 30 DAY)
+            ) as active_days
         FROM users u
         HAVING (test_xp + coding_xp + interview_xp) > 0
         ORDER BY (test_xp + coding_xp + interview_xp) DESC
@@ -514,26 +505,26 @@ def get_leaderboard(db_cursor: tuple = Depends(get_cursor)):
         """
         cursor.execute(query)
         rows = cursor.fetchall()
-        
         leaderboard = []
         for rank, row in enumerate(rows):
             xp = int(row['test_xp']) + int(row['coding_xp']) + int(row['interview_xp'])
             level = calculate_level(xp)
-            
-            badges = []
-            if row['aptitude_tests'] >= 5: badges.append("🧠 Aptitude Master")
-            if row['coding_solved'] >= 5: badges.append("💻 Tech Ninja")
-            if row['interviews'] >= 2: badges.append("🗣️ GD Star")
-            if not badges: badges.append("🌱 Rising Star")
-            
             next_level_xp = 100 if level == 1 else (300 if level == 2 else (700 if level == 3 else (1500 if level == 4 else 3000)))
-
+            badges = []
+            if row['aptitude_tests'] >= 5: badges.append("🧠 Aptitude Pro")
+            if row['coding_solved'] >= 5: badges.append("💻 Code Solver")
+            if row['interviews'] >= 2: badges.append("🎙️ Interviewer")
+            if int(row.get('active_days', 0)) >= 7: badges.append("🔥 Consistent")
+            if not badges: badges.append("🌱 Rising Star")
             leaderboard.append({
-                "rank": rank + 1, "id": row['id'], "name": f"{row['fname']} {row['lname']}",
-                "profile_picture_url": row['profile_picture_url'], "xp": xp, "level": level,
-                "next_level_xp": next_level_xp, "badges": badges, "streak": min((row['aptitude_tests'] + row['coding_solved']), 30)
+                "rank": rank + 1, "id": row['id'],
+                "name": f"{row['fname']} {row['lname']}",
+                "fname": row['fname'], "lname": row['lname'],
+                "profile_picture_url": row['profile_picture_url'],
+                "xp": xp, "level": level, "next_level_xp": next_level_xp,
+                "badges": badges,
+                "active_days": int(row.get('active_days', 0)),
             })
-            
         return leaderboard
     except Exception as e:
         print(f"❌ Leaderboard Error: {e}")
@@ -596,9 +587,13 @@ def get_filtered_leaderboard(category: str, db_cursor: tuple = Depends(get_curso
             level = calculate_level(xp)
             next_level_xp = 100 if level == 1 else (300 if level == 2 else (700 if level == 3 else (1500 if level == 4 else 3000)))
             leaderboard.append({
-                "rank": rank + 1, "id": row['id'], "name": f"{row['fname']} {row['lname']}",
-                "profile_picture_url": row['profile_picture_url'], "xp": xp, "level": level,
-                "next_level_xp": next_level_xp, "badges": [f"{category.capitalize()} Specialist"], "streak": 0
+                "rank": rank + 1, "id": row['id'],
+                "name": f"{row['fname']} {row['lname']}",
+                "fname": row['fname'], "lname": row['lname'],
+                "profile_picture_url": row['profile_picture_url'],
+                "xp": xp, "level": level, "next_level_xp": next_level_xp,
+                "badges": [f"{category.capitalize()} Specialist"],
+                "active_days": 0,
             })
         return leaderboard
     except Exception as e:

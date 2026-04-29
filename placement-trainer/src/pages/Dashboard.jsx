@@ -4,105 +4,135 @@ import { useAuth } from "../context/AuthContext";
 import API_BASE from "../api";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
-import { motion } from "framer-motion"; 
-import ScrollReveal from "../animations/ScrollReveal"; 
-import BouncyClick from "../animations/BouncyClick"; 
 import {
-  ResponsiveContainer,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
+  CartesianGrid, Tooltip, LineChart, Line, AreaChart, Area,
 } from "recharts";
-import { FiActivity, FiCode, FiCpu, FiTrendingUp, FiUser, FiCamera, FiZap, FiTarget, FiCheckCircle, FiAward, FiUpload, FiUsers, FiVideo } from "react-icons/fi";
+import {
+  FiBookOpen, FiCode, FiCpu, FiMic, FiUsers, FiFileText,
+  FiCamera, FiUpload, FiArrowRight, FiCheckCircle, FiXCircle,
+  FiTrendingUp, FiZap, FiAward, FiTarget, FiCalendar,
+} from "react-icons/fi";
 
-// --- CONSTANTS ---
 const APTITUDE_TOPICS = [
-  'Percentages', 'Profit & Loss', 'Time, Speed & Distance', 'Ratio & Proportion', 
-  'Number System', 'Simple & Compound Interest', 'Permutation & Combination', 
-  'Geometry & Mensuration', 'Series & Patterns', 'Coding-Decoding', 'Blood Relations', 
-  'Direction Sense', 'Grammar', 'Vocabulary', 'Reading Comprehension', 'Final Aptitude Test'
+  "Percentages","Profit & Loss","Time, Speed & Distance","Ratio & Proportion",
+  "Number System","Simple & Compound Interest","Permutation & Combination",
+  "Geometry & Mensuration","Series & Patterns","Coding-Decoding","Blood Relations",
+  "Direction Sense","Grammar","Vocabulary","Reading Comprehension","Final Aptitude Test",
 ];
-
 const TECHNICAL_TOPICS = [
-  'C Programming', 'C++ Programming', 'Java Programming', 'Python Programming', 'Data Structures & Algorithms',
-  'Database Management Systems', 'Operating Systems', 'Computer Networks'
+  "C Programming","C++ Programming","Java Programming","Python Programming",
+  "Data Structures & Algorithms","Database Management Systems","Operating Systems","Computer Networks",
 ];
 
-// --- ANIMATION VARIANTS ---
-const containerVariants = {
-  hidden: { opacity: 0 },
-  show: {
-    opacity: 1,
-    transition: { staggerChildren: 0.1 }
-  }
+const MODULE_COLORS = {
+  aptitude:  { color: "#a855f7", glow: "rgba(168,85,247,0.2)",  label: "Aptitude",   icon: FiBookOpen },
+  technical: { color: "#3b82f6", glow: "rgba(59,130,246,0.2)",  label: "Technical",  icon: FiCpu },
+  coding:    { color: "#06b6d4", glow: "rgba(6,182,212,0.2)",   label: "Coding",     icon: FiCode },
+  interview: { color: "#ec4899", glow: "rgba(236,72,153,0.2)",  label: "Interview",  icon: FiMic },
+  gd:        { color: "#22c55e", glow: "rgba(34,197,94,0.2)",   label: "GD",         icon: FiUsers },
 };
-
-const itemVariants = {
-  hidden: { opacity: 0, y: 20 },
-  show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 100 } }
-};
-
-// --- COMPONENTS ---
 
 const CustomTooltip = ({ active, payload, label }) => {
-  if (active && payload && payload.length) {
-    return (
-      <div className="bg-black/90 backdrop-blur-xl p-4 border border-white/20 rounded-xl shadow-[0_0_20px_rgba(45,212,191,0.2)] z-50">
-        <p className="text-gray-400 font-bold mb-2 text-xs uppercase tracking-widest border-b border-white/10 pb-1">{label}</p>
-        {payload.map((p, i) => (
-          <div key={i} className="flex items-center gap-3 mb-1">
-            <div className="w-2 h-2 rounded-full shadow-[0_0_8px]" style={{ backgroundColor: p.color, boxShadow: `0 0 8px ${p.color}` }} />
-            <span className="text-sm font-medium text-gray-200">{p.name}: <span className="font-bold text-lg" style={{ color: p.color }}>{p.value}</span></span>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return null;
+  if (!active || !payload?.length) return null;
+  return (
+    <div style={{ background: "rgba(8,8,13,0.95)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 12, padding: "10px 14px" }}>
+      <p style={{ color: "#6b7280", fontSize: 11, marginBottom: 6 }}>{label}</p>
+      {payload.map((p, i) => (
+        <div key={i} style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 2 }}>
+          <div style={{ width: 6, height: 6, borderRadius: "50%", background: p.color }} />
+          <span style={{ color: "#e5e7eb", fontSize: 12 }}>{p.name}: <strong style={{ color: p.color }}>{p.value}</strong></span>
+        </div>
+      ))}
+    </div>
+  );
 };
 
-const StatCard = ({ title, value, icon, gradient, glowColor }) => (
-  <div className="relative overflow-hidden p-6 rounded-3xl bg-black/40 backdrop-blur-xl border border-white/10 hover:border-white/30 transition-all duration-300 group hover:shadow-2xl">
-    <div className={`absolute -top-10 -right-10 w-32 h-32 rounded-full blur-[60px] opacity-20 group-hover:opacity-40 transition-opacity ${glowColor}`} />
-    
-    <div className="flex items-start justify-between relative z-10">
-        <div>
-            <p className="text-gray-400 text-xs font-bold uppercase tracking-widest mb-1">{title}</p>
-            <h3 className="text-4xl font-black text-white tracking-tight drop-shadow-lg">
-                {value}
-            </h3>
+// ── mini stat card ────────────────────────────────────────────────────────────
+function StatCard({ label, value, sub, color, icon: Icon }) {
+  return (
+    <div className="stat-card" style={{ "--card-color": color, "--card-glow": color + "20" }}>
+      <div className="stat-card-top">
+        <div className="stat-icon" style={{ background: color + "18", border: `1px solid ${color}35` }}>
+          <Icon size={16} style={{ color }} />
         </div>
-        <div className={`p-3 rounded-2xl bg-gradient-to-br ${gradient} shadow-lg group-hover:scale-110 transition-transform duration-500`}>
-            <div className="text-white text-xl">{icon}</div>
-        </div>
+        <span className="stat-value" style={{ color }}>{value}</span>
+      </div>
+      <p className="stat-label">{label}</p>
+      {sub && <p className="stat-sub">{sub}</p>}
     </div>
-  </div>
-);
+  );
+}
+
+// ── section header ────────────────────────────────────────────────────────────
+function SectionTitle({ icon: Icon, title, color, action, onAction }) {
+  return (
+    <div className="section-title-row">
+      <div className="section-title-left">
+        <div className="section-icon" style={{ background: color + "18", border: `1px solid ${color}30` }}>
+          <Icon size={14} style={{ color }} />
+        </div>
+        <h2 className="section-title-text">{title}</h2>
+      </div>
+      {action && (
+        <button onClick={onAction} className="section-action" style={{ color }}>
+          {action} <FiArrowRight size={12} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── module activity card ──────────────────────────────────────────────────────
+function ModuleCard({ module, count, score, cta, onCta, isEmpty }) {
+  const m = MODULE_COLORS[module];
+  const Icon = m.icon;
+  return (
+    <div className="module-card" style={{ "--mc": m.color, "--mc-glow": m.glow }}>
+      <div className="module-card-header">
+        <div className="module-icon-wrap" style={{ background: m.color + "18", border: `1px solid ${m.color}30` }}>
+          <Icon size={18} style={{ color: m.color }} />
+        </div>
+        <span className="module-label">{m.label}</span>
+      </div>
+      {isEmpty ? (
+        <div className="module-empty">
+          <p>No activity yet</p>
+          <button onClick={onCta} className="module-cta" style={{ color: m.color, borderColor: m.color + "40" }}>
+            {cta} <FiArrowRight size={11} />
+          </button>
+        </div>
+      ) : (
+        <div className="module-stats">
+          {count !== undefined && (
+            <div className="module-stat">
+              <span className="module-stat-val" style={{ color: m.color }}>{count}</span>
+              <span className="module-stat-key">sessions</span>
+            </div>
+          )}
+          {score !== undefined && (
+            <div className="module-stat">
+              <span className="module-stat-val">{score}</span>
+              <span className="module-stat-key">avg score</span>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const { user: authUser, updateUser } = useAuth();
   const navigate = useNavigate();
   const [user, setUser] = useState(authUser);
-  
-  // Data States
   const [tests, setTests] = useState([]);
   const [codingAttempts, setCodingAttempts] = useState([]);
   const [interviewAttempts, setInterviewAttempts] = useState([]);
-  const [gdAttempts, setGdAttempts] = useState([]); 
-
+  const [gdAttempts, setGdAttempts] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [selectedView, setSelectedView] = useState('aptitude');
-  const [graphTopic, setGraphTopic] = useState(APTITUDE_TOPICS[0]); 
-
-  // Profile Pic States
+  const [activeTab, setActiveTab] = useState("aptitude");
+  const [graphTopic, setGraphTopic] = useState(APTITUDE_TOPICS[0]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [uploading, setUploading] = useState(false);
@@ -110,505 +140,523 @@ export default function Dashboard() {
   useEffect(() => {
     if (!authUser?.id) { setLoading(false); return; }
     const controller = new AbortController();
-    
-    async function fetchUser() {
+    (async () => {
       try {
         const data = await getUserDetails(authUser.id, 1, 10000000, controller.signal);
-        if(data.user) {
-            setUser(data.user);
-            updateUser(data.user);
-        }
+        if (data.user) { setUser(data.user); updateUser(data.user); }
         setTests((data.tests || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
         setCodingAttempts((data.coding || []).sort((a, b) => new Date(a.created_at) - new Date(b.created_at)));
-        
-        // 🔥 Fetch GD History
         try {
-            const gdRes = await axios.get(`${API_BASE}/api/gd/user/${authUser.id}/history`, { signal: controller.signal });
-            setGdAttempts(gdRes.data || []);
-        } catch (gdErr) {
-            console.error("No GD history found or error fetching.", gdErr);
-        }
-
-        // 🔥 Fetch AI Interview History directly from the new backend route!
+          const g = await axios.get(`${API_BASE}/api/gd/user/${authUser.id}/history`, { signal: controller.signal });
+          setGdAttempts(g.data || []);
+        } catch (_) {}
         try {
-            const intRes = await axios.get(`${API_BASE}/api/interview/history/${authUser.id}`, { signal: controller.signal });
-            setInterviewAttempts(intRes.data.history || []);
-        } catch (intErr) {
-            console.error("No interview history found.", intErr);
-        }
-
+          const iv = await axios.get(`${API_BASE}/api/interview/history/${authUser.id}`, { signal: controller.signal });
+          setInterviewAttempts(iv.data.history || []);
+        } catch (_) {}
       } catch (err) {
-        if (err.name !== 'AbortError') console.error("Fetch error:", err);
+        if (err.name !== "AbortError") console.error(err);
       } finally {
         if (!controller.signal.aborted) setLoading(false);
       }
-    }
-    fetchUser();
+    })();
     return () => controller.abort();
   }, [authUser?.id]);
 
   useEffect(() => {
-    if (!selectedFile) { setPreview(undefined); return; }
-    const objectUrl = URL.createObjectURL(selectedFile);
-    setPreview(objectUrl);
-    return () => URL.revokeObjectURL(objectUrl);
+    if (!selectedFile) { setPreview(null); return; }
+    const url = URL.createObjectURL(selectedFile);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
   }, [selectedFile]);
-  
+
   const handleUpload = async () => {
     if (!selectedFile || !authUser?.id) return;
     setUploading(true);
-    const formData = new FormData();
-    formData.append("file", selectedFile);
+    const fd = new FormData();
+    fd.append("file", selectedFile);
     try {
-      const res = await axios.post(`${API_BASE}/api/user/${authUser.id}/upload-pfp`, formData);
-      const updatedUser = { ...user, profile_picture_url: res.data.profile_picture_url };
-      setUser(updatedUser);
-      updateUser(updatedUser);
-      setSelectedFile(null);
-    } catch (err) { alert("Upload failed."); } finally { setUploading(false); }
+      const res = await axios.post(`${API_BASE}/api/user/${authUser.id}/upload-pfp`, fd);
+      const u2 = { ...user, profile_picture_url: res.data.profile_picture_url };
+      setUser(u2); updateUser(u2); setSelectedFile(null);
+    } catch { alert("Upload failed."); } finally { setUploading(false); }
   };
 
-  // --- MEMOIZED LOGIC ---
-  const stats = useMemo(() => {
-    const totalTests = tests.length;
-    const avgScore = totalTests > 0 ? (tests.reduce((a, b) => a + (b.score || 0), 0) / totalTests).toFixed(1) : 0;
-    const codingSolved = codingAttempts.filter(c => c.is_correct).length;
-    return { totalTests, avgScore, codingSolved, interviewCount: interviewAttempts.length };
-  }, [tests, codingAttempts, interviewAttempts]);
+  // ── derived data ──────────────────────────────────────────────────────────
+  const aptTests = useMemo(() => tests.filter(t => APTITUDE_TOPICS.includes(t.topic)), [tests]);
+  const techTests = useMemo(() => tests.filter(t => TECHNICAL_TOPICS.includes(t.topic)), [tests]);
+  const codingSolved = useMemo(() => codingAttempts.filter(c => c.is_correct).length, [codingAttempts]);
 
-  const { filteredTests } = useMemo(() => {
-    const relevantTopics = selectedView === 'aptitude' ? APTITUDE_TOPICS : TECHNICAL_TOPICS;
-    const filtered = tests.filter(test => test.topic && relevantTopics.includes(test.topic));
-    return { filteredTests: filtered };
-  }, [tests, selectedView]);
+  const avgScore = (arr) => arr.length === 0 ? "—" :
+    (arr.reduce((s, t) => s + (t.score || 0), 0) / arr.length).toFixed(1);
 
-  const codingData = useMemo(() => {
-    const solvedByDifficulty = { easy: 0, medium: 0, hard: 0 };
-    const uniqueSolved = new Set();
-    const solvedAttempts = [];
-    codingAttempts.forEach(attempt => {
-      if (attempt.is_correct && !uniqueSolved.has(attempt.problem_title)) {
-        uniqueSolved.add(attempt.problem_title);
-        solvedAttempts.push(attempt);
-        if (solvedByDifficulty[attempt.difficulty] !== undefined) solvedByDifficulty[attempt.difficulty]++;
-      }
-    });
+  // topic list for current apt/tech tab
+  const currentTopics = activeTab === "technical" ? TECHNICAL_TOPICS : APTITUDE_TOPICS;
 
-    return {
-      bar: [
-        { difficulty: 'Easy', solved: solvedByDifficulty.easy, fill: '#4ade80' },
-        { difficulty: 'Medium', solved: solvedByDifficulty.medium, fill: '#60a5fa' },
-        { difficulty: 'Hard', solved: solvedByDifficulty.hard, fill: '#f472b6' },
-      ],
-      line: solvedAttempts.map((attempt, i) => ({
-        date: new Date(attempt.created_at).toLocaleDateString(),
-        'Problems Solved': i + 1,
-      }))
-    };
-  }, [codingAttempts]);
-
+  // 3-line topic trend: Easy / Moderate / Hard scores over attempts for selected topic
   const topicTrendData = useMemo(() => {
-    if (!graphTopic) return [];
-    const topicTests = tests.filter(t => t.topic === graphTopic && t.mode);
-    const easyTests = topicTests.filter(t => t.mode.toLowerCase() === 'easy');
-    const moderateTests = topicTests.filter(t => t.mode.toLowerCase() === 'moderate');
-    const hardTests = topicTests.filter(t => t.mode.toLowerCase() === 'hard');
-    
-    const maxAttempts = Math.max(easyTests.length, moderateTests.length, hardTests.length);
-    const data = [];
-    for (let i = 0; i < maxAttempts; i++) {
-      data.push({
-        attempt: `Attempt ${i + 1}`,
-        Easy: easyTests[i] ? easyTests[i].score : null,
-        Moderate: moderateTests[i] ? moderateTests[i].score : null,
-        Hard: hardTests[i] ? hardTests[i].score : null,
-      });
+    if (activeTab !== "aptitude" && activeTab !== "technical") return [];
+    const src = activeTab === "aptitude" ? aptTests : techTests;
+    const topicTests = src.filter(t => t.topic === graphTopic && t.mode);
+    const easy     = topicTests.filter(t => t.mode.toLowerCase() === "easy");
+    const moderate = topicTests.filter(t => t.mode.toLowerCase() === "moderate");
+    const hard     = topicTests.filter(t => t.mode.toLowerCase() === "hard");
+    const maxLen = Math.max(easy.length, moderate.length, hard.length);
+    if (maxLen === 0) return [];
+    return Array.from({ length: maxLen }, (_, i) => ({
+      attempt: `#${i + 1}`,
+      Easy:     easy[i]     ? easy[i].score     : null,
+      Moderate: moderate[i] ? moderate[i].score : null,
+      Hard:     hard[i]     ? hard[i].score     : null,
+    }));
+  }, [activeTab, aptTests, techTests, graphTopic]);
+
+  // chart data for coding / interview / gd tabs
+  const chartData = useMemo(() => {
+    if (activeTab === "coding") {
+      return [
+        { name: "Easy",   solved: codingAttempts.filter(c => c.is_correct && c.difficulty === "easy").length,   fill: "#22c55e" },
+        { name: "Medium", solved: codingAttempts.filter(c => c.is_correct && c.difficulty === "medium").length, fill: "#06b6d4" },
+        { name: "Hard",   solved: codingAttempts.filter(c => c.is_correct && c.difficulty === "hard").length,   fill: "#ec4899" },
+      ];
     }
-    return data;
-  }, [tests, graphTopic]);
-
-  // Map the new Database Schema correctly for the AreaChart
-  const interviewGraphData = useMemo(() => interviewAttempts.map(item => ({
-    role: item.role || "General",
-    score: item.score || 0,
-    date: item.timestamp || "N/A"
-  })).reverse(), [interviewAttempts]); // Reverse so oldest is on left of chart
-
-  const gdGraphData = useMemo(() => gdAttempts.map((item, index) => ({
-    topic: item.topic || `GD ${index + 1}`,
-    score: item.overall_score || 0,
-    date: item.created_at ? new Date(item.created_at).toLocaleDateString() : "N/A"
-  })), [gdAttempts]);
-
-  // --- RENDERERS ---
-
-  // 🔥 NEW: Beautiful Interview Cards Grid instead of a boring table!
-  const renderInterviewCards = () => {
-    if (interviewAttempts.length === 0) {
-        return (
-            <div className="bg-black/40 border border-white/10 p-10 rounded-3xl text-center shadow-xl m-4">
-                <p className="text-gray-400 text-lg">No interviews completed yet.</p>
-                <p className="text-gray-500 text-sm mt-2 mb-6">Take your first AI interview to see your performance metrics here.</p>
-                <button 
-                    onClick={() => navigate('/interview')} 
-                    className="bg-neon-purple text-white font-bold px-6 py-3 rounded-xl hover:bg-purple-600 transition-colors"
-                >
-                    Start Mock Interview
-                </button>
-            </div>
-        );
+    if (activeTab === "interview") {
+      return [...interviewAttempts].reverse().map((iv, i) => ({ n: i + 1, score: iv.score || 0 }));
     }
+    if (activeTab === "gd") {
+      return gdAttempts.map((g, i) => ({ n: i + 1, score: g.overall_score || 0 }));
+    }
+    return [];
+  }, [activeTab, codingAttempts, interviewAttempts, gdAttempts]);
 
-    return (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 p-4">
-            {interviewAttempts.map((interview) => (
-                <div key={interview.id} className="bg-[#1e293b] border border-gray-700 p-6 rounded-3xl shadow-xl hover:border-neon-purple/50 transition-all hover:-translate-y-1 relative overflow-hidden group">
-                    
-                    {/* Dynamic Color Bar */}
-                    <div className={`absolute top-0 left-0 w-full h-1 ${interview.score >= 75 ? 'bg-neon-green' : interview.score >= 50 ? 'bg-yellow-400' : 'bg-red-400'}`}></div>
-                    
-                    <div className="flex justify-between items-start mb-6">
-                        <div>
-                            <h3 className="text-lg font-bold text-white group-hover:text-neon-purple transition-colors">
-                                {interview.role || "Software Engineer"}
-                            </h3>
-                            <p className="text-xs text-gray-400 mt-1">{interview.timestamp}</p>
-                        </div>
-                        <div className={`text-3xl font-black ${interview.score >= 75 ? 'text-neon-green' : interview.score >= 50 ? 'text-yellow-400' : 'text-red-400'}`}>
-                            {interview.score}
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-black/30 p-4 rounded-2xl border border-white/5">
-                            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">Technical</p>
-                            <div className="flex items-end gap-1">
-                                <p className="text-xl font-bold text-white">{interview.technical_score}</p>
-                                <p className="text-gray-600 text-sm mb-0.5">/10</p>
-                            </div>
-                        </div>
-                        <div className="bg-black/30 p-4 rounded-2xl border border-white/5">
-                            <p className="text-[10px] text-gray-500 uppercase tracking-widest font-bold mb-1">Communication</p>
-                            <div className="flex items-end gap-1">
-                                <p className="text-xl font-bold text-white">{interview.communication_score}</p>
-                                <p className="text-gray-600 text-sm mb-0.5">/10</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-  };
-
-  const renderTable = () => {
-    let items = [], headers = [];
-    if (selectedView === 'coding') { items = codingAttempts; headers = ['Problem', 'Difficulty', 'Status', 'Date']; }
-    else if (selectedView === 'gd') { items = gdAttempts; headers = ['GD Topic', 'Comm. Score', 'Overall Score', 'Date']; } 
-    else { items = filteredTests; headers = ['Topic', 'Mode', 'Score', 'Date']; }
-
-    if (items.length === 0) return <div className="p-12 text-center text-gray-500 font-mono text-sm border-t border-white/5">No data logs found. Start grinding! 🚀</div>;
-
-    return (
-      <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-          <thead>
-            <tr className="bg-white/5 text-gray-400 text-xs uppercase tracking-wider border-b border-white/10">
-              {headers.map(h => <th key={h} className="p-4 font-semibold">{h}</th>)}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-white/5 text-sm text-gray-300">
-            {items.slice().reverse().map((item, index) => (
-              <tr key={index} className="hover:bg-white/5 transition-colors group">
-                {selectedView === 'gd' ? (
-                  <>
-                    <td className="p-4 font-bold text-purple-400 group-hover:text-purple-300 transition-colors line-clamp-1 max-w-[200px] truncate" title={item.topic}>{item.topic}</td>
-                    <td className="p-4 text-xs opacity-70">{item.communication}/10</td>
-                    <td className="p-4"><span className={`px-2 py-1 rounded-md text-xs font-bold ${item.overall_score >= 35 ? 'bg-green-500/20 text-green-400 border border-green-500/30' : 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/30'}`}>{item.overall_score}/50</span></td>
-                  </>
-                ) : selectedView === 'coding' ? (
-                  <>
-                    <td className="p-4 font-medium text-white">{item.problem_title}</td>
-                    <td className="p-4"><span className={`text-[10px] uppercase font-bold tracking-wider px-2 py-1 rounded border ${item.difficulty === 'easy' ? 'border-green-500/50 text-green-400' : item.difficulty === 'medium' ? 'border-blue-500/50 text-blue-400' : 'border-pink-500/50 text-pink-400'}`}>{item.difficulty}</span></td>
-                    <td className="p-4">{item.is_correct ? <span className="text-green-400 flex items-center gap-1"><FiCheckCircle/> Solved</span> : <span className="text-red-400">Failed</span>}</td>
-                  </>
-                ) : (
-                  <>
-                    <td className="p-4 font-medium">{item.topic}</td>
-                    <td className="p-4 capitalize text-xs opacity-70">{item.mode || 'Standard'}</td>
-                    <td className="p-4 font-bold font-mono">{item.score}/{item.total}</td>
-                  </>
-                )}
-                <td className="p-4 opacity-50 text-xs font-mono">{item.created_at ? new Date(item.created_at).toLocaleDateString() : "-"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    );
-  };
+  // recent activity for tab
+  const recentItems = useMemo(() => {
+    if (activeTab === "aptitude") return [...aptTests].reverse().slice(0, 8);
+    if (activeTab === "technical") return [...techTests].reverse().slice(0, 8);
+    if (activeTab === "coding") return [...codingAttempts].reverse().slice(0, 8);
+    if (activeTab === "interview") return [...interviewAttempts].slice(0, 6);
+    if (activeTab === "gd") return [...gdAttempts].slice(0, 6);
+    return [];
+  }, [activeTab, aptTests, techTests, codingAttempts, interviewAttempts, gdAttempts]);
 
   if (loading) return (
-    <div className="flex min-h-screen items-center justify-center bg-game-bg text-white">
-      <div className="flex flex-col items-center gap-6">
-        <div className="w-12 h-12 border-4 border-neon-blue border-t-transparent rounded-full animate-spin"></div>
-        <p className="font-bold tracking-widest animate-pulse text-neon-blue">LOADING...</p>
-      </div>
+    <div className="db-loading">
+      <div className="db-spinner" />
+      <p>Loading your dashboard...</p>
     </div>
   );
-  
+
+  const tabColor = MODULE_COLORS[activeTab].color;
+
   return (
-    <div className="min-h-screen bg-game-bg text-white p-6 md:p-12 font-sans">
-      <div className="max-w-7xl mx-auto space-y-12">
-        
-        {/* HEADER */}
-        <ScrollReveal direction="down">
-          <div className="flex flex-col md:flex-row justify-between items-end gap-6 border-b border-white/10 pb-8">
-              <div>
-                  <h1 className="text-5xl md:text-6xl font-display font-bold text-white mb-2 tracking-tight">
-                      DASHBOARD
-                  </h1>
-                  <p className="text-gray-400 text-sm">Welcome back, <span className="text-neon-blue font-bold">{user?.fname}</span>. Let's crush some goals.</p>
-              </div>
-              
-              <BouncyClick>
-                <button 
-                    onClick={() => navigate('/leaderboard')}
-                    className="group relative inline-flex items-center gap-3 px-6 py-3 bg-neon-yellow/10 border border-neon-yellow/40 rounded-xl text-neon-yellow font-bold uppercase tracking-widest hover:bg-neon-yellow hover:text-black transition-all duration-300 overflow-hidden"
-                >
-                    <FiAward size={20} />
-                    <span>Hall of Fame</span>
-                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
-                </button>
-              </BouncyClick>
-          </div>
-        </ScrollReveal>
+    <div className="db-root">
 
-        {/* 1. STATS GRID */}
-        <motion.div 
-          variants={containerVariants}
-          initial="hidden"
-          animate="show"
-          className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6"
-        >
-          <motion.div variants={itemVariants} whileHover={{ y: -5 }}>
-            <StatCard title="Total Tests" value={stats.totalTests} icon={<FiActivity/>} gradient="from-cyan-500 to-blue-500" glowColor="bg-cyan-500" />
-          </motion.div>
-          <motion.div variants={itemVariants} whileHover={{ y: -5 }}>
-            <StatCard title="Avg Score" value={stats.avgScore} icon={<FiTarget/>} gradient="from-emerald-400 to-green-600" glowColor="bg-emerald-500" />
-          </motion.div>
-          <motion.div variants={itemVariants} whileHover={{ y: -5 }}>
-            <StatCard title="Coding Streak" value={stats.codingSolved} icon={<FiCode/>} gradient="from-purple-500 to-pink-500" glowColor="bg-purple-500" />
-          </motion.div>
-          <motion.div variants={itemVariants} whileHover={{ y: -5 }}>
-            <StatCard title="Interviews" value={stats.interviewCount} icon={<FiUser/>} gradient="from-orange-400 to-red-500" glowColor="bg-orange-500" />
-          </motion.div>
-        </motion.div>
+      {/* ══ HEADER ══ */}
+      <div className="db-header">
+        <div>
+          <h1 className="db-title">
+            Hey, <span style={{ background: "linear-gradient(135deg,#a855f7,#ec4899)", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent" }}>{user?.fname}</span> 👋
+          </h1>
+          <p className="db-sub">Here's your placement prep at a glance.</p>
+        </div>
+        <button onClick={() => navigate("/leaderboard")} className="db-lb-btn">
+          <FiAward size={14} /> Leaderboard
+        </button>
+      </div>
 
-        {/* 2. PROFILE & MAIN CONTENT */}
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* PROFILE CARD */}
-            <ScrollReveal direction="right" delay={0.2}>
-              <div className="lg:col-span-1 bg-black/40 backdrop-blur-xl p-8 rounded-3xl border border-white/10 flex flex-col items-center text-center relative overflow-hidden group h-full">
-                  <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-b from-neon-blue/20 to-transparent opacity-50" />
-                  
-                  <div className="relative w-40 h-40 mb-6 group-hover:scale-105 transition-transform duration-500">
-                      <div className="absolute inset-0 border-2 border-dashed border-neon-blue/50 rounded-full animate-spin-slow"></div>
-                      
-                      <div className="w-full h-full rounded-full p-2 bg-black/50 relative z-10">
-                          <div className="w-full h-full rounded-full overflow-hidden bg-gray-800 relative z-10 border-2 border-white/10">
-                              {preview ? <img src={preview} className="w-full h-full object-cover" alt="Profile" /> :
-                              user?.profile_picture_url ? <img src={`${API_BASE}${user.profile_picture_url}`} className="w-full h-full object-cover" alt="Profile" /> :
-                              <div className="w-full h-full flex items-center justify-center text-5xl font-black text-gray-600">{user?.fname?.[0]}</div>}
-                          </div>
-                      </div>
-                      
-                      <label htmlFor="pfp" className="absolute bottom-2 right-2 z-20 bg-neon-blue text-black p-3 rounded-xl cursor-pointer hover:bg-white transition-colors shadow-lg shadow-neon-blue/30">
-                          <FiCamera size={18} />
-                      </label>
-                      <input type="file" id="pfp" className="hidden" onChange={(e) => { if(e.target.files[0]) setSelectedFile(e.target.files[0]) }} />
-                  </div>
+      {/* ══ OVERVIEW STATS ══ */}
+      <div className="db-stats-grid">
+        <StatCard label="Aptitude Tests" value={aptTests.length} sub={`Avg ${avgScore(aptTests)}/20`} color="#a855f7" icon={FiBookOpen} />
+        <StatCard label="Technical Tests" value={techTests.length} sub={`Avg ${avgScore(techTests)}/20`} color="#3b82f6" icon={FiCpu} />
+        <StatCard label="Problems Solved" value={codingSolved} sub={`${codingAttempts.length} total attempts`} color="#06b6d4" icon={FiCode} />
+        <StatCard label="Mock Interviews" value={interviewAttempts.length} color="#ec4899" icon={FiMic} />
+        <StatCard label="GD Sessions" value={gdAttempts.length} color="#22c55e" icon={FiUsers} />
+      </div>
 
-                  {selectedFile && (
-                    <BouncyClick>
-                      <button onClick={handleUpload} className="mb-6 px-6 py-2 bg-neon-blue text-black rounded-lg text-xs font-bold uppercase tracking-widest flex items-center gap-2">
-                          {uploading ? "Uploading..." : <><FiUpload /> Save Photo</>}
-                      </button>
-                    </BouncyClick>
-                  )}
+      {/* ══ TWO-COLUMN LAYOUT ══ */}
+      <div className="db-main-grid">
 
-                  <h2 className="text-2xl font-bold text-white mb-1">{user?.fname} {user?.lname}</h2>
-                  <p className="text-gray-400 text-sm mb-6 font-mono">{user?.email}</p>
-
-                  <div className="w-full grid grid-cols-2 gap-3 mt-auto">
-                      <div className="p-4 bg-white/5 rounded-2xl border border-white/10">
-                          <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Year</p>
-                          <p className="text-xl font-bold text-white">{user?.year}</p>
-                      </div>
-                      <div className="p-4 bg-white/5 rounded-2xl border border-white/10 overflow-hidden">
-                          <p className="text-[10px] text-gray-400 uppercase font-bold mb-1">Field</p>
-                          <p className="text-xl font-bold text-white truncate" title={user?.field}>{user?.field}</p>
-                      </div>
-                  </div>
-              </div>
-            </ScrollReveal>
-
-            {/* CHARTS SECTION */}
-            <div className="lg:col-span-2 space-y-8">
-                
-                <ScrollReveal direction="left" delay={0.3}>
-                  {/* TABS */}
-                  <div className="p-1 bg-black/40 backdrop-blur rounded-2xl border border-white/10 inline-flex w-full overflow-x-auto custom-scrollbar">
-                      {['aptitude', 'technical', 'coding', 'interview', 'gd'].map((tab) => (
-                        <BouncyClick key={tab} className="flex-1 min-w-[100px]">
-                          <button
-                              onClick={() => { 
-                                  setSelectedView(tab); 
-                                  if(tab === 'technical') setGraphTopic(TECHNICAL_TOPICS[0]); 
-                                  else if(tab === 'aptitude') setGraphTopic(APTITUDE_TOPICS[0]); 
-                              }}
-                              className={`w-full py-3 px-4 text-xs md:text-sm font-bold uppercase tracking-wider rounded-xl transition-all duration-300 ${
-                                  selectedView === tab 
-                                  ? 'bg-neon-blue text-black shadow-[0_0_15px_rgba(45,212,191,0.4)]' 
-                                  : 'text-gray-400 hover:text-white hover:bg-white/5'
-                              }`}
-                          >
-                              {tab === 'gd' ? 'GD' : tab}
-                          </button>
-                        </BouncyClick>
-                      ))}
-                  </div>
-                </ScrollReveal>
-
-                <ScrollReveal direction="up" delay={0.4}>
-                  {/* GRAPH CONTAINER */}
-                  {selectedView === 'interview' ? (
-                     <div className="bg-black/40 backdrop-blur-xl p-6 rounded-3xl border border-white/10 relative overflow-hidden h-[400px]">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-neon-blue/10 rounded-full blur-[80px] -z-10" />
-                        <h3 className="text-xl font-bold mb-6 text-white flex items-center gap-2"><FiCamera className="text-neon-blue"/> Interview Mastery</h3>
-                        <ResponsiveContainer width="100%" height="90%">
-                          <AreaChart data={interviewGraphData}>
-                            <defs>
-                              <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#2DD4BF" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#2DD4BF" stopOpacity={0}/>
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                            <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
-                            <YAxis domain={[0, 100]} tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Area type="monotone" dataKey="score" stroke="#2DD4BF" strokeWidth={3} fill="url(#colorScore)" />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                     </div>
-                  ) : selectedView === 'gd' ? (
-                     <div className="bg-black/40 backdrop-blur-xl p-6 rounded-3xl border border-white/10 relative overflow-hidden h-[400px]">
-                        <div className="absolute top-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full blur-[80px] -z-10" />
-                        <h3 className="text-xl font-bold mb-6 text-white flex items-center gap-2"><FiUsers className="text-purple-400"/> GD Performance (Out of 50)</h3>
-                        <ResponsiveContainer width="100%" height="90%">
-                          <AreaChart data={gdGraphData}>
-                            <defs>
-                              <linearGradient id="colorGdScore" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#c084fc" stopOpacity={0.3}/>
-                                <stop offset="95%" stopColor="#c084fc" stopOpacity={0}/>
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" vertical={false} />
-                            <XAxis dataKey="date" tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
-                            <YAxis domain={[0, 50]} tick={{ fill: '#9ca3af', fontSize: 10 }} axisLine={false} tickLine={false} />
-                            <Tooltip content={<CustomTooltip />} />
-                            <Area type="monotone" dataKey="score" stroke="#c084fc" strokeWidth={3} fill="url(#colorGdScore)" />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                     </div>
-                  ) : selectedView === 'coding' ? (
-                     <div className="grid grid-cols-1 gap-6 h-[400px]">
-                        <div className="bg-black/40 backdrop-blur-xl p-6 rounded-3xl border border-white/10 h-full">
-                           <h3 className="text-xl font-bold mb-4 text-white flex items-center gap-2"><FiCode className="text-neon-purple"/> Problems Solved</h3>
-                           <ResponsiveContainer width="100%" height="90%">
-                              <BarChart data={codingData.bar} layout="vertical">
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" horizontal={false} />
-                                  <XAxis type="number" hide />
-                                  <YAxis dataKey="difficulty" type="category" width={60} tick={{fill:'#fff', fontSize:12}} axisLine={false} tickLine={false}/>
-                                  <Tooltip content={<CustomTooltip />} cursor={{fill: 'rgba(255,255,255,0.05)'}} />
-                                  <Bar dataKey="solved" radius={[0, 10, 10, 0]} barSize={30}>
-                                     {codingData.bar.map((entry, index) => <cell key={`cell-${index}`} fill={entry.fill} />)}
-                                  </Bar>
-                              </BarChart>
-                           </ResponsiveContainer>
-                        </div>
-                     </div>
-                  ) : (
-                    <div className="bg-black/40 backdrop-blur-xl p-6 rounded-3xl border border-white/10 relative overflow-hidden shadow-2xl h-[450px]">
-                      <div className="absolute -top-20 -left-20 w-96 h-96 bg-neon-purple/10 rounded-full blur-[100px] -z-10" />
-                      
-                      <div className="flex flex-col md:flex-row justify-between items-center mb-6 z-20 relative">
-                          <div>
-                              <h3 className="text-2xl font-bold text-white mb-1 flex items-center gap-2">
-                                  <FiTrendingUp className="text-neon-green"/> Topic Progress
-                              </h3>
-                              <p className="text-xs text-gray-400">Track your score history.</p>
-                          </div>
-                          
-                          <div className="relative group min-w-[200px] mt-4 md:mt-0">
-                              <select 
-                                  value={graphTopic} 
-                                  onChange={(e) => setGraphTopic(e.target.value)}
-                                  className="w-full appearance-none bg-black border border-white/20 text-white rounded-xl py-3 pl-4 pr-10 text-sm outline-none focus:border-neon-blue focus:ring-1 focus:ring-neon-blue transition-colors cursor-pointer"
-                              >
-                                  {(selectedView === 'aptitude' ? APTITUDE_TOPICS : TECHNICAL_TOPICS).map(t => (
-                                      <option key={t} value={t} className="bg-black text-gray-200">{t}</option>
-                                  ))}
-                              </select>
-                              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none">▼</div>
-                          </div>
-                      </div>
-
-                      <div className="h-[320px] w-full">
-                          {topicTrendData.length > 0 ? (
-                              <ResponsiveContainer width="100%" height="100%">
-                              <LineChart data={topicTrendData}>
-                                  <CartesianGrid strokeDasharray="3 3" stroke="#ffffff05" vertical={false} />
-                                  <XAxis dataKey="attempt" tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
-                                  <YAxis domain={[0, 20]} tick={{ fill: '#6b7280', fontSize: 10 }} axisLine={false} tickLine={false} />
-                                  <Tooltip content={<CustomTooltip />} />
-                                  <Legend iconType="circle" wrapperStyle={{ paddingTop: '20px' }} />
-                                  <Line type="monotone" dataKey="Easy" stroke="#4ade80" strokeWidth={3} dot={{r:0}} activeDot={{r:6, strokeWidth: 0, fill:'#4ade80'}} connectNulls />
-                                  <Line type="monotone" dataKey="Moderate" stroke="#60a5fa" strokeWidth={3} dot={{r:0}} activeDot={{r:6, strokeWidth: 0, fill:'#60a5fa'}} connectNulls />
-                                  <Line type="monotone" dataKey="Hard" stroke="#f472b6" strokeWidth={3} dot={{r:0}} activeDot={{r:6, strokeWidth: 0, fill:'#f472b6'}} connectNulls />
-                              </LineChart>
-                              </ResponsiveContainer>
-                          ) : (
-                              <div className="h-full flex flex-col items-center justify-center text-gray-500 gap-4">
-                                  <FiZap size={40} className="text-gray-700 opacity-50"/>
-                                  <p>No data recorded for {graphTopic}.</p>
-                              </div>
-                          )}
-                      </div>
-                    </div>
-                  )}
-                </ScrollReveal>
+        {/* LEFT: profile card */}
+        <div className="db-profile-card">
+          <div className="db-avatar-wrap">
+            <div className="db-avatar-ring" />
+            <div className="db-avatar">
+              {preview
+                ? <img src={preview} className="db-avatar-img" alt="Preview" />
+                : user?.profile_picture_url
+                  ? <img src={`${API_BASE}${user.profile_picture_url}`} className="db-avatar-img" alt="Profile" />
+                  : <span className="db-avatar-initial">{user?.fname?.[0]}</span>
+              }
             </div>
+            <label htmlFor="pfp" className="db-avatar-cam"><FiCamera size={14} /></label>
+            <input type="file" id="pfp" className="hidden" onChange={e => { if (e.target.files[0]) setSelectedFile(e.target.files[0]); }} />
+          </div>
+
+          {selectedFile && (
+            <button onClick={handleUpload} className="db-upload-btn" disabled={uploading}>
+              <FiUpload size={12} /> {uploading ? "Saving..." : "Save Photo"}
+            </button>
+          )}
+
+          <h2 className="db-name">{user?.fname} {user?.lname}</h2>
+          <p className="db-email">{user?.email}</p>
+
+          <div className="db-user-meta">
+            <div className="db-meta-item"><span className="db-meta-label">Year</span><span className="db-meta-val">{user?.year || "—"}</span></div>
+            <div className="db-meta-item"><span className="db-meta-label">Field</span><span className="db-meta-val" title={user?.field}>{user?.field || "—"}</span></div>
+          </div>
+
+          {/* quick module links */}
+          <div className="db-quick-links">
+            <p className="db-quick-title">Quick Access</p>
+            {[
+              { label: "Aptitude Hub",  path: "/aptitude",               color: "#a855f7" },
+              { label: "Technical Hub", path: "/technical",              color: "#3b82f6" },
+              { label: "Coding Arena",  path: "/technical/coding-levels",color: "#06b6d4" },
+              { label: "Mock Interview",path: "/interview",              color: "#ec4899" },
+              { label: "Resume AI",     path: "/resume-analyzer",        color: "#f97316" },
+            ].map((l, i) => (
+              <button key={i} onClick={() => navigate(l.path)} className="db-quick-link" style={{ "--ql": l.color }}>
+                <span style={{ color: l.color }}>{l.label}</span>
+                <FiArrowRight size={11} style={{ color: l.color }} />
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* 3. ACTIVITY LOG / INTERVIEW CARDS */}
-        <ScrollReveal delay={0.2} direction="up">
-          <div className="bg-black/40 backdrop-blur-xl rounded-3xl border border-white/10 overflow-hidden mb-12">
-              <div className="p-6 border-b border-white/10 flex items-center gap-3 bg-white/5">
-                  {selectedView === 'interview' ? <FiVideo className="text-neon-purple" /> : <FiActivity className="text-neon-blue" />}
-                  <h3 className="text-lg font-bold text-white">
-                      {selectedView === 'interview' ? 'Interview History' : 'Recent Activity Log'}
-                  </h3>
-              </div>
-              <div className="p-2">
-                  {selectedView === 'interview' ? renderInterviewCards() : renderTable()}
-              </div>
-          </div>
-        </ScrollReveal>
+        {/* RIGHT: module activity */}
+        <div className="db-right-col">
 
+          {/* module tab bar */}
+          <div className="db-tab-bar">
+            {Object.entries(MODULE_COLORS).map(([key, m]) => {
+              const Icon = m.icon;
+              return (
+                <button key={key} onClick={() => {
+                    setActiveTab(key);
+                    if (key === "aptitude") setGraphTopic(APTITUDE_TOPICS[0]);
+                    else if (key === "technical") setGraphTopic(TECHNICAL_TOPICS[0]);
+                  }}
+                  className={`db-tab ${activeTab === key ? "db-tab-active" : ""}`}
+                  style={activeTab === key ? { color: m.color, borderColor: m.color, background: m.color + "15" } : {}}>
+                  <Icon size={13} />
+                  <span className="db-tab-label">{m.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* chart */}
+          <div className="db-chart-card" style={{ "--tc": tabColor }}>
+
+            {/* header row: title + topic dropdown for apt/tech */}
+            <div className="db-chart-header">
+              <p className="db-chart-title">
+                {activeTab === "coding" ? "Problems solved by difficulty"
+                  : activeTab === "interview" ? "Interview score over time"
+                  : activeTab === "gd" ? "GD score over time"
+                  : `Score trend — ${graphTopic}`}
+              </p>
+
+              {(activeTab === "aptitude" || activeTab === "technical") && (
+                <div className="db-topic-select-wrap">
+                  <select
+                    value={graphTopic}
+                    onChange={e => setGraphTopic(e.target.value)}
+                    className="db-topic-select"
+                    style={{ borderColor: tabColor + "40", color: tabColor }}
+                  >
+                    {currentTopics.map(t => (
+                      <option key={t} value={t}>{t}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            {/* 3-line chart for aptitude / technical */}
+            {(activeTab === "aptitude" || activeTab === "technical") ? (
+              topicTrendData.length === 0 ? (
+                <div className="db-chart-empty">
+                  <p>No attempts recorded for <strong style={{ color: tabColor }}>{graphTopic}</strong> yet.</p>
+                  <button onClick={() => navigate(activeTab === "technical" ? "/technical" : "/aptitude")}
+                    className="db-chart-cta" style={{ color: tabColor, borderColor: tabColor + "50" }}>
+                    Go practice <FiArrowRight size={12} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* legend */}
+                  <div className="db-legend">
+                    {[
+                      { key: "Easy",     color: "#22c55e" },
+                      { key: "Moderate", color: "#06b6d4" },
+                      { key: "Hard",     color: "#ec4899" },
+                    ].map(l => (
+                      <div key={l.key} className="db-legend-item">
+                        <div className="db-legend-dot" style={{ background: l.color, boxShadow: `0 0 6px ${l.color}` }} />
+                        <span>{l.key}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <LineChart data={topicTrendData} margin={{ left: -10, right: 8 }}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#ffffff06" vertical={false} />
+                      <XAxis dataKey="attempt" tick={{ fill: "#6b7280", fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <YAxis domain={[0, 20]} tick={{ fill: "#6b7280", fontSize: 10 }} axisLine={false} tickLine={false} />
+                      <Tooltip content={<CustomTooltip />} />
+                      <Line type="monotone" dataKey="Easy"     stroke="#22c55e" strokeWidth={2.5}
+                        dot={{ r: 3, fill: "#22c55e", strokeWidth: 0 }}
+                        activeDot={{ r: 5, strokeWidth: 0 }} connectNulls />
+                      <Line type="monotone" dataKey="Moderate" stroke="#06b6d4" strokeWidth={2.5}
+                        dot={{ r: 3, fill: "#06b6d4", strokeWidth: 0 }}
+                        activeDot={{ r: 5, strokeWidth: 0 }} connectNulls />
+                      <Line type="monotone" dataKey="Hard"     stroke="#ec4899" strokeWidth={2.5}
+                        dot={{ r: 3, fill: "#ec4899", strokeWidth: 0 }}
+                        activeDot={{ r: 5, strokeWidth: 0 }} connectNulls />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </>
+              )
+            ) : chartData.length === 0 ? (
+              <div className="db-chart-empty">
+                <p>No data yet — complete some {MODULE_COLORS[activeTab].label} sessions to see your progress here.</p>
+                <button onClick={() => navigate(
+                  activeTab === "coding" ? "/technical/coding-levels"
+                  : activeTab === "interview" ? "/interview"
+                  : "/gd"
+                )} className="db-chart-cta" style={{ color: tabColor, borderColor: tabColor + "50" }}>
+                  Go to {MODULE_COLORS[activeTab].label} <FiArrowRight size={12} />
+                </button>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={200}>
+                {activeTab === "coding" ? (
+                  <BarChart data={chartData} layout="vertical" margin={{ left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" horizontal={false} />
+                    <XAxis type="number" hide />
+                    <YAxis dataKey="name" type="category" width={52} tick={{ fill: "#9ca3af", fontSize: 11 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} cursor={{ fill: "rgba(255,255,255,0.03)" }} />
+                    <Bar dataKey="solved" radius={[0, 8, 8, 0]} barSize={22}>
+                      {chartData.map((e, i) => <cell key={i} fill={e.fill} />)}
+                    </Bar>
+                  </BarChart>
+                ) : (
+                  <AreaChart data={chartData} margin={{ left: -10 }}>
+                    <defs>
+                      <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor={tabColor} stopOpacity={0.3} />
+                        <stop offset="95%" stopColor={tabColor} stopOpacity={0} />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#ffffff08" vertical={false} />
+                    <XAxis dataKey="n" tick={{ fill: "#6b7280", fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <YAxis domain={activeTab === "gd" ? [0, 50] : [0, 100]} tick={{ fill: "#6b7280", fontSize: 10 }} axisLine={false} tickLine={false} />
+                    <Tooltip content={<CustomTooltip />} />
+                    <Area type="monotone" dataKey="score" stroke={tabColor} strokeWidth={2.5} fill="url(#areaGrad)" />
+                  </AreaChart>
+                )}
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          {/* recent activity */}
+          <div className="db-activity-card">
+            <p className="db-activity-title">Recent Activity</p>
+            {recentItems.length === 0 ? (
+              <p className="db-activity-empty">Nothing yet. Start a session to see your history here.</p>
+            ) : (
+              <div className="db-activity-list">
+                {recentItems.map((item, i) => {
+                  if (activeTab === "coding") return (
+                    <div key={i} className="db-activity-row">
+                      <div className="db-activity-main">
+                        {item.is_correct
+                          ? <FiCheckCircle size={13} style={{ color: "#22c55e", flexShrink: 0 }} />
+                          : <FiXCircle size={13} style={{ color: "#ef4444", flexShrink: 0 }} />}
+                        <span className="db-activity-name">{item.problem_title}</span>
+                      </div>
+                      <div className="db-activity-meta">
+                        <span className="db-diff-badge" style={{
+                          color: item.difficulty === "easy" ? "#22c55e" : item.difficulty === "medium" ? "#06b6d4" : "#ec4899",
+                          borderColor: item.difficulty === "easy" ? "#22c55e40" : item.difficulty === "medium" ? "#06b6d440" : "#ec489940",
+                        }}>{item.difficulty}</span>
+                        <span className="db-activity-date">{item.created_at ? new Date(item.created_at).toLocaleDateString() : ""}</span>
+                      </div>
+                    </div>
+                  );
+                  if (activeTab === "interview") return (
+                    <div key={i} className="db-activity-row">
+                      <div className="db-activity-main">
+                        <FiMic size={13} style={{ color: "#ec4899", flexShrink: 0 }} />
+                        <span className="db-activity-name">{item.role || "Mock Interview"}</span>
+                      </div>
+                      <div className="db-activity-meta">
+                        <span className="db-score-badge" style={{
+                          color: item.score >= 75 ? "#22c55e" : item.score >= 50 ? "#eab308" : "#ef4444"
+                        }}>{item.score}/100</span>
+                        <span className="db-activity-date">{item.timestamp || ""}</span>
+                      </div>
+                    </div>
+                  );
+                  if (activeTab === "gd") return (
+                    <div key={i} className="db-activity-row">
+                      <div className="db-activity-main">
+                        <FiUsers size={13} style={{ color: "#22c55e", flexShrink: 0 }} />
+                        <span className="db-activity-name">{item.topic || "Group Discussion"}</span>
+                      </div>
+                      <div className="db-activity-meta">
+                        <span className="db-score-badge" style={{ color: "#22c55e" }}>{item.overall_score}/50</span>
+                        <span className="db-activity-date">{item.created_at ? new Date(item.created_at).toLocaleDateString() : ""}</span>
+                      </div>
+                    </div>
+                  );
+                  return (
+                    <div key={i} className="db-activity-row">
+                      <div className="db-activity-main">
+                        <FiTarget size={13} style={{ color: tabColor, flexShrink: 0 }} />
+                        <span className="db-activity-name">{item.topic}</span>
+                      </div>
+                      <div className="db-activity-meta">
+                        <span className="db-score-badge" style={{ color: tabColor }}>{item.score}/{item.total}</span>
+                        <span className="db-activity-tag">{item.mode || "standard"}</span>
+                        <span className="db-activity-date">{item.created_at ? new Date(item.created_at).toLocaleDateString() : ""}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
+
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:wght@300;400;500;700&display=swap');
+
+        .db-root { min-height: 100vh; padding: 24px 24px 80px; max-width: 1200px; margin: 0 auto; font-family: 'DM Sans', sans-serif; color: #e2e8f0; }
+
+        /* LOADING */
+        .db-loading { min-height: 60vh; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: #6b7280; font-size: 14px; }
+        .db-spinner { width: 36px; height: 36px; border: 3px solid rgba(168,85,247,0.2); border-top-color: #a855f7; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+
+        /* HEADER */
+        .db-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
+        .db-title { font-family: 'Syne', sans-serif; font-size: clamp(26px, 4vw, 36px); font-weight: 800; color: #fff; letter-spacing: -0.03em; margin: 0; }
+        .db-sub { color: #4b5563; font-size: 14px; margin: 4px 0 0; }
+        .db-lb-btn {
+          display: flex; align-items: center; gap: 8px; padding: 9px 18px; border-radius: 12px;
+          font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+          background: rgba(250,204,21,0.08); border: 1px solid rgba(250,204,21,0.25); color: #fbbf24;
+          transition: all 0.2s;
+        }
+        .db-lb-btn:hover { background: rgba(250,204,21,0.15); transform: translateY(-1px); }
+
+        /* STATS GRID */
+        .db-stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
+        @media(max-width:900px) { .db-stats-grid { grid-template-columns: repeat(3, 1fr); } }
+        @media(max-width:600px) { .db-stats-grid { grid-template-columns: repeat(2, 1fr); } }
+
+        .stat-card {
+          padding: 16px; border-radius: 16px; cursor: default;
+          background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.07);
+          transition: border-color 0.2s, transform 0.2s;
+        }
+        .stat-card:hover { border-color: color-mix(in srgb, var(--card-color) 30%, transparent); transform: translateY(-2px); }
+        .stat-card-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+        .stat-icon { width: 30px; height: 30px; border-radius: 8px; display: flex; align-items: center; justify-content: center; }
+        .stat-value { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 800; }
+        .stat-label { font-size: 12px; color: #4b5563; font-weight: 600; }
+        .stat-sub { font-size: 11px; color: #374151; margin-top: 2px; }
+
+        /* MAIN GRID */
+        .db-main-grid { display: grid; grid-template-columns: 240px 1fr; gap: 20px; }
+        @media(max-width:900px) { .db-main-grid { grid-template-columns: 1fr; } }
+
+        /* PROFILE CARD */
+        .db-profile-card {
+          border-radius: 20px; padding: 24px; display: flex; flex-direction: column; align-items: center;
+          background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
+          height: fit-content; position: sticky; top: 80px;
+        }
+        .db-avatar-wrap { position: relative; width: 90px; height: 90px; margin-bottom: 16px; }
+        .db-avatar-ring {
+          position: absolute; inset: -4px; border-radius: 50%;
+          border: 2px dashed rgba(168,85,247,0.3);
+          animation: slowSpin 12s linear infinite;
+        }
+        @keyframes slowSpin { to { transform: rotate(360deg); } }
+        .db-avatar { width: 90px; height: 90px; border-radius: 50%; overflow: hidden; background: rgba(255,255,255,0.05); border: 2px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; }
+        .db-avatar-img { width: 100%; height: 100%; object-fit: cover; }
+        .db-avatar-initial { font-size: 32px; font-weight: 800; color: #374151; }
+        .db-avatar-cam {
+          position: absolute; bottom: 0; right: 0; width: 28px; height: 28px; border-radius: 8px;
+          background: linear-gradient(135deg,#a855f7,#ec4899); display: flex; align-items: center; justify-content: center;
+          cursor: pointer; color: #fff; border: 2px solid #07070a;
+        }
+        .db-upload-btn {
+          display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px;
+          font-size: 12px; font-weight: 700; cursor: pointer; margin-bottom: 12px;
+          background: linear-gradient(135deg,#a855f7,#ec4899); color: #fff; border: none;
+        }
+        .db-name { font-size: 16px; font-weight: 800; color: #fff; text-align: center; margin: 0 0 4px; }
+        .db-email { font-size: 11px; color: #4b5563; text-align: center; margin: 0 0 16px; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+        .db-user-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; width: 100%; margin-bottom: 20px; }
+        .db-meta-item { background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 10px; }
+        .db-meta-label { display: block; font-size: 10px; color: #4b5563; font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 3px; }
+        .db-meta-val { font-size: 14px; font-weight: 800; color: #fff; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+
+        .db-quick-links { width: 100%; display: flex; flex-direction: column; gap: 4px; }
+        .db-quick-title { font-size: 10px; color: #374151; text-transform: uppercase; letter-spacing: 0.1em; font-weight: 700; margin-bottom: 8px; }
+        .db-quick-link {
+          display: flex; align-items: center; justify-content: space-between; padding: 9px 12px; border-radius: 10px;
+          font-size: 12px; font-weight: 600; cursor: pointer; width: 100%;
+          background: transparent; border: 1px solid transparent; transition: all 0.15s;
+        }
+        .db-quick-link:hover { background: color-mix(in srgb, var(--ql) 8%, transparent); border-color: color-mix(in srgb, var(--ql) 25%, transparent); }
+
+        /* RIGHT COLUMN */
+        .db-right-col { display: flex; flex-direction: column; gap: 16px; }
+
+        /* TABS */
+        .db-tab-bar { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; padding-bottom: 4px; }
+        .db-tab-bar::-webkit-scrollbar { display: none; }
+        .db-tab {
+          display: flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px;
+          font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; flex-shrink: 0;
+          color: #4b5563; background: transparent; border: 1px solid transparent; transition: all 0.15s;
+        }
+        .db-tab:hover { background: rgba(255,255,255,0.04); color: #9ca3af; }
+        .db-tab-active { font-weight: 800; }
+        .db-tab-label { }
+
+        /* CHART CARD */
+        .db-chart-card {
+          border-radius: 18px; padding: 20px;
+          background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07);
+          border-top: 2px solid color-mix(in srgb, var(--tc) 50%, transparent);
+        }
+        .db-chart-title { font-size: 12px; color: #4b5563; font-weight: 600; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.06em; }
+        .db-chart-empty { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; height: 160px; text-align: center; }
+        .db-chart-empty p { font-size: 13px; color: #374151; max-width: 300px; line-height: 1.5; }
+        .db-chart-cta { display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 10px; font-size: 12px; font-weight: 700; cursor: pointer; background: transparent; border: 1px solid; }
+
+        /* ACTIVITY CARD */
+        .db-activity-card { border-radius: 18px; padding: 20px; background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); }
+        .db-activity-title { font-size: 12px; color: #4b5563; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 12px; }
+        .db-activity-empty { font-size: 13px; color: #374151; }
+        .db-activity-list { display: flex; flex-direction: column; gap: 2px; }
+        .db-activity-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 9px 10px; border-radius: 10px; transition: background 0.15s; }
+        .db-activity-row:hover { background: rgba(255,255,255,0.03); }
+        .db-activity-main { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1; }
+        .db-activity-name { font-size: 13px; color: #d1d5db; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .db-activity-meta { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+        .db-activity-date { font-size: 10px; color: #374151; font-family: monospace; }
+        .db-activity-tag { font-size: 10px; color: #4b5563; background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px; text-transform: capitalize; }
+        .db-score-badge { font-size: 12px; font-weight: 800; font-family: monospace; }
+        .db-diff-badge { font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.06em; padding: 2px 7px; border-radius: 6px; border: 1px solid; }
+      `}</style>
     </div>
   );
 }

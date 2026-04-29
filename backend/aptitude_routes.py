@@ -107,7 +107,7 @@ def generate_prompt(topic: str, count: int, difficulty: str | None = None) -> st
     3. 'answer' must be the EXACT text from the 'options' list.
     4. NO LATEX OR BACKSLASHES. Use standard text.
     5. 'explanation' MUST be formatted with exact headers "*Standard method*:" and "*SHORTCUT Trick*:".
-    6. In the 'explanation', you MUST insert a newline character (\\n) after EACH full stop (.) so every sentence/step is on a new line.
+    6. Use real line breaks for steps. Do NOT return escaped sequences like \\n or \\t inside explanation text.
     
     Format:
     [
@@ -126,11 +126,27 @@ def generate_prompt(topic: str, count: int, difficulty: str | None = None) -> st
 def clean_and_parse_json(text: str):
     text = re.sub(r'```json\s*', '', text, flags=re.IGNORECASE)
     text = re.sub(r'```', '', text)
-    text = text.replace('\\', '\\\\') 
     try: return json.loads(text)
     except:
         try: return ast.literal_eval(text)
         except: return []
+
+def normalize_explanation_text(explanation) -> str:
+    if not explanation:
+        return "No explanation provided."
+
+    text = str(explanation).strip()
+    text = text.replace("\r\n", "\n").replace("\r", "\n")
+    text = text.replace("\\\\n", "\n").replace("\\n", "\n").replace("\\t", " ")
+    text = re.sub(r'\n{3,}', '\n\n', text)
+
+    text = re.sub(r'(?i)\*?standard\s*method\*?\s*:', '*Standard method*:', text)
+    text = re.sub(r'(?i)⚡?\s*\*?shortcut\s*trick\*?\s*:', '*SHORTCUT Trick*:', text)
+
+    if '\n' not in text:
+        text = re.sub(r'\.\s+', '.\n', text)
+
+    return text.strip()
 
 def validate_mcqs(data, count):
     if not isinstance(data, list): return []
@@ -162,7 +178,7 @@ def validate_mcqs(data, count):
             if matched_ans:
                 cleaned.append({
                     "question": str(question), "options": opts_str, 
-                    "answer": matched_ans, "explanation": str(explanation),
+                    "answer": matched_ans, "explanation": normalize_explanation_text(explanation),
                     "topic": q.get("topic", "General"),
                     "difficulty": q.get("difficulty", "medium")
                 })
@@ -253,7 +269,7 @@ async def generate_aptitude_test(req: MCQRequest, db_cursor: tuple = Depends(get
                     "question": q["q"],
                     "options": q["options"],
                     "answer": q["ans"],
-                    "explanation": q.get("exp", "No explanation available."),
+                    "explanation": normalize_explanation_text(q.get("exp", "No explanation available.")),
                     "module": cat, 
                     "topic": cat,
                     "difficulty": q["diff"]

@@ -6,12 +6,52 @@ import API_BASE from "../../api";
 import { FiX, FiChevronRight, FiChevronLeft, FiCheckCircle, FiGrid, FiShield, FiAlertTriangle, FiClock, FiBookmark, FiRefreshCcw, FiDownload, FiHome, FiXCircle, FiFileText, FiAlertCircle } from "react-icons/fi";
 import html2pdf from "html2pdf.js";
 
+const normalizeExplanation = (rawExplanation = "") => {
+  if (!rawExplanation) return "";
+
+  let text = String(rawExplanation)
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n")
+    .replace(/\\\\n/g, "\n")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, " ")
+    .trim();
+
+  text = text
+    .replace(/\*?Standard\s*method\*?\s*:/i, "*Standard method*:")
+    .replace(/⚡?\s*\*?SHORTCUT\s*Trick\*?\s*:/i, "*SHORTCUT Trick*:");
+
+  if (!text.includes("\n")) {
+    text = text.replace(/\.\s+/g, ".\n");
+  }
+
+  return text;
+};
+
+const renderExplanationLines = (text, className = "") => {
+  const lines = text
+    .split("\n")
+    .map(line => line.trim())
+    .filter(Boolean);
+
+  if (!lines.length) return <p className={className}>No explanation provided.</p>;
+
+  return (
+    <ul className="space-y-2 list-disc pl-5">
+      {lines.map((line, idx) => (
+        <li key={idx} className={className}>{line}</li>
+      ))}
+    </ul>
+  );
+};
+
 const ExplanationDisplay = ({ explanation }) => {
   const [showShortcut, setShowShortcut] = useState(false);
-  if (!explanation) return <p>No explanation provided.</p>;
+  const normalizedExplanation = normalizeExplanation(explanation);
+  if (!normalizedExplanation) return <p>No explanation provided.</p>;
 
   const splitRegex = /(?:\n|^)\s*(?:⚡\s*SHORTCUT:|\*SHORTCUT Trick\*:|\*?SHORTCUT\*?:)/i;
-  const parts = explanation.split(splitRegex);
+  const parts = normalizedExplanation.split(splitRegex);
 
   if (parts.length >= 2) {
     const standard = parts[0].replace(/\*Standard method\*:/i, '').replace(/Standard Method:/i, '').trim();
@@ -21,7 +61,7 @@ const ExplanationDisplay = ({ explanation }) => {
       <div className="space-y-4">
         <div>
           <strong className="text-neon-blue font-bold block mb-2 text-base">📚 Standard Method:</strong>
-          <p className="whitespace-pre-wrap leading-relaxed">{standard}</p>
+          {renderExplanationLines(standard, "leading-relaxed") }
         </div>
         <button onClick={() => setShowShortcut(!showShortcut)} className="px-4 py-2 bg-neon-purple/20 text-neon-purple border border-neon-purple/50 rounded-lg text-sm font-bold uppercase tracking-widest hover:bg-neon-purple/30 transition-colors">
           {showShortcut ? "Hide ⚡ Shortcut Trick" : "Show ⚡ Shortcut Trick"}
@@ -29,7 +69,7 @@ const ExplanationDisplay = ({ explanation }) => {
         {showShortcut && (
           <div className="shortcut-box bg-neon-purple/10 p-4 rounded-xl border border-neon-purple/50 animate-fade-in mt-2">
             <strong className="text-neon-purple font-bold block mb-2 text-base">⚡ Shortcut Trick:</strong>
-            <p className="whitespace-pre-wrap leading-relaxed">{shortcut}</p>
+            {renderExplanationLines(shortcut, "leading-relaxed") }
           </div>
         )}
       </div>
@@ -38,15 +78,16 @@ const ExplanationDisplay = ({ explanation }) => {
   return (
     <div>
       <span className="font-bold text-neon-blue block mb-2 text-base">Explanation:</span>
-      <p className="whitespace-pre-wrap leading-relaxed">{explanation}</p>
+      {renderExplanationLines(normalizedExplanation, "leading-relaxed") }
     </div>
   );
 };
 
 const PDFExplanationDisplay = ({ explanation }) => {
-  if (!explanation) return <p>No explanation provided.</p>;
+  const normalizedExplanation = normalizeExplanation(explanation);
+  if (!normalizedExplanation) return <p>No explanation provided.</p>;
   const splitRegex = /(?:\n|^)\s*(?:⚡\s*SHORTCUT:|\*SHORTCUT Trick\*:|\*?SHORTCUT\*?:)/i;
-  const parts = explanation.split(splitRegex);
+  const parts = normalizedExplanation.split(splitRegex);
 
   if (parts.length >= 2) {
     const standard = parts[0].replace(/\*Standard method\*:/i, '').replace(/Standard Method:/i, '').trim();
@@ -55,11 +96,11 @@ const PDFExplanationDisplay = ({ explanation }) => {
       <div className="space-y-4">
         <div>
           <strong className="text-blue-700 block mb-1 uppercase text-xs tracking-widest">📚 Standard Method:</strong>
-          <p className="whitespace-pre-wrap text-sm text-gray-800">{standard}</p>
+          {renderExplanationLines(standard, "text-sm text-gray-800") }
         </div>
         <div className="bg-purple-50 p-3 rounded-lg border border-purple-200">
           <strong className="text-purple-700 block mb-1 uppercase text-xs tracking-widest">⚡ Shortcut Trick:</strong>
-          <p className="whitespace-pre-wrap text-sm text-gray-800">{shortcut}</p>
+          {renderExplanationLines(shortcut, "text-sm text-gray-800") }
         </div>
       </div>
     );
@@ -67,7 +108,7 @@ const PDFExplanationDisplay = ({ explanation }) => {
   return (
     <div>
       <strong className="text-blue-700 block mb-1 uppercase text-xs tracking-widest">Explanation:</strong>
-      <p className="whitespace-pre-wrap text-sm text-gray-800">{explanation}</p>
+      {renderExplanationLines(normalizedExplanation, "text-sm text-gray-800") }
     </div>
   );
 };
@@ -115,7 +156,7 @@ export default function TestPage() {
             // ==========================================
             const res = await axios.get(`${API_BASE}/api/tests/${testId}/start`);
             const mappedQs = res.data.questions.map(aiQ => ({
-                id: aiQ.id, // Ensure ID is mapped if available
+                id: aiQ.id, 
                 question: aiQ.q,
                 options: aiQ.options,
             }));
@@ -132,7 +173,6 @@ export default function TestPage() {
             const endpoint = isTechnical ? '/api/technical/mcqs/test' : '/api/aptitude/mcqs/test';
             const count = decodedTopic === "Final Aptitude Test" ? 60 : 20;
 
-            // 🔥 Sending user_id so backend can filter out seen UUIDs!
             const res = await axios.post(`${API_BASE}${endpoint}`, {
                 topic: decodedTopic,
                 difficulty: mode,
@@ -288,14 +328,13 @@ export default function TestPage() {
 
         } else {
             let calculatedScore = 0;
-            const trackingPayload = []; // 🔥 NEW: Prepare data for tracking
+            const trackingPayload = []; 
             
             sections.forEach((sec, sId) => {
                 sec.qs.forEach((q, qId) => {
                     const isCorrect = userAnswers[`${sId}-${qId}`] === q.answer;
                     if (isCorrect) calculatedScore += 1;
                     
-                    // 🔥 NEW: Add to tracking payload if it has a unique UUID
                     if (q.id) {
                         trackingPayload.push({
                             id: q.id,
@@ -306,12 +345,10 @@ export default function TestPage() {
             });
             setFinalScore(calculatedScore);
 
-            // 1. Submit Standard Score
             await axios.post(`${API_BASE}/api/test/submit`, {
                 user_id: user.id, topic: decodedTopic, mode: mode, score: calculatedScore, total: totalQuestions,
             });
             
-            // 2. 🔥 NEW: Background tracking request for Question Weakness Data
             if (trackingPayload.length > 0) {
                 try {
                     await axios.post(`${API_BASE}/api/aptitude/mcqs/track`, {
@@ -432,7 +469,7 @@ export default function TestPage() {
 
           {/* SPLIT SCREEN MCQ REPORT */}
           <div className="max-w-7xl mx-auto w-full flex-1 flex flex-col min-h-0 bg-[#1E293B] rounded-3xl border border-gray-700 shadow-2xl overflow-hidden animate-fade-in">
-              
+             
               {/* Pagination Header */}
               <div className="flex flex-col md:flex-row items-center justify-between bg-black/40 p-4 border-b border-gray-700 shrink-0 gap-4">
                   <button 
@@ -466,7 +503,7 @@ export default function TestPage() {
 
               {/* Split Screen Content */}
               <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
-                  
+                 
                   {/* LEFT PANEL: Question & Options */}
                   <div className="w-full lg:w-1/2 p-6 lg:p-8 overflow-y-auto custom-scrollbar border-b lg:border-b-0 lg:border-r border-gray-700">
                       <p className="md:hidden text-xs font-bold text-blue-400 uppercase tracking-widest mb-4">{currentReportItem.sectionTitle}</p>
