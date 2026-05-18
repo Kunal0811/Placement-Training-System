@@ -1,7 +1,6 @@
 import io
 import re
 import docx
-import spacy
 import fitz  # PyMuPDF (Install via: pip install pymupdf)
 import pdfplumber
 import json
