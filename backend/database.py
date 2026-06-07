@@ -6,33 +6,41 @@ from dotenv import load_dotenv
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.engine import URL
 
 load_dotenv()
 
 # --- Configuration ---
-DB_HOST = os.getenv("DB_HOST", "localhost")
-DB_PORT = os.getenv("DB_PORT", "3306")
-DB_USER = os.getenv("DB_USER", "root")
-DB_PASSWORD = os.getenv("DB_PASSWORD", "")
-DB_NAME = os.getenv("DB_NAME", "placify")
+DB_HOST = os.getenv("DB_HOST", "localhost").strip()
+DB_PORT = int(os.getenv("DB_PORT", 3306))
+DB_USER = os.getenv("DB_USER", "root").strip()
+DB_PASSWORD = os.getenv("DB_PASSWORD", "").strip()
+DB_NAME = os.getenv("DB_NAME", "placify").strip()
 
 # 1. Config for Legacy (mysql.connector)
 db_config = {
     "host": DB_HOST,
-    "port": int(DB_PORT),
+    "port": DB_PORT,
     "user": DB_USER,
     "password": DB_PASSWORD,
     "database": DB_NAME,
     "ssl_disabled": False  # Crucial for Aiven
 }
 
-# 2. Config for SQLAlchemy
-SQLALCHEMY_DATABASE_URL = f"mysql+mysqlconnector://{DB_USER}:{DB_PASSWORD}@{DB_HOST}:{DB_PORT}/{DB_NAME}"
+# 2. Config for SQLAlchemy (Using URL.create for 100% safety with special characters)
+sqlalchemy_url = URL.create(
+    drivername="mysql+mysqlconnector",
+    username=DB_USER,
+    password=DB_PASSWORD,
+    host=DB_HOST,
+    port=DB_PORT,
+    database=DB_NAME
+)
 
 # --- SQLAlchemy Setup ---
 # 🔥 THE FIX: We MUST pass connect_args to force the driver to use SSL
 engine = create_engine(
-    SQLALCHEMY_DATABASE_URL, 
+    sqlalchemy_url, 
     pool_pre_ping=True,
     connect_args={"ssl_disabled": False} 
 )
